@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Clarif.io Connector
  * Description: Συνδέει το WooCommerce με το Clarif.io για τον υπολογισμό καθαρού κέρδους.
- * Version: 1.8.0
+ * Version: 1.8.1
  * Author: Clarif.io Team
  * Author URI: https://www.clarif.io
  * 
@@ -69,7 +69,8 @@ function clarifio_init_plugin() {
 // ==========================================
 function clarifio_register_settings_page() {
 
-    $icon_url = plugin_dir_url( __FILE__ ) . 'assets/favicon.png';
+    // $icon_url = plugin_dir_url( __FILE__ ) . 'assets/favicon.png';
+        $icon_url = 'data:image/svg+xml;base64,' . base64_encode(file_get_contents(plugin_dir_path( __FILE__ ) . 'assets/favicon.svg'));
 
     add_menu_page(
         'Clarif.io Dashboard', 
@@ -104,7 +105,7 @@ function clarifio_settings_html() {
             <div style="background: #fff; padding: 20px; border-left: 4px solid #2563eb; box-shadow: 0 1px 3px rgba(0,0,0,.05); margin-bottom: 20px; display: flex; align-items: center; justify-content: space-between;">
                 <div>
                     <h1 style="margin: 0; color: #1e293b; font-size: 24px; display: flex; align-items: center;">
-                        <span class="dashicons dashicons-chart-area" style="font-size: 32px; width: 32px; height: 32px; color: #2563eb; margin-right: 10px;"></span> 
+                        <img src="<?php echo $icon_url; ?>" alt="Clarif.io" style="width: 32px; height: 32px; margin-right: 10px;"> 
                         Clarif.io Workspace
                     </h1>
                     <p style="margin: 5px 0 0 0; color: #64748b; font-size: 14px;">Η καθημερινή σας οικονομική πυξίδα για το e-commerce.</p>
