@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Clarif.io Connector
  * Description: Συνδέει το WooCommerce με το Clarif.io για τον υπολογισμό καθαρού κέρδους.
- * Version: 1.8.1
+ * Version: 1.8.2
  * Author: Clarif.io Team
  * Author URI: https://www.clarif.io
  * 
@@ -70,7 +70,7 @@ function clarifio_init_plugin() {
 function clarifio_register_settings_page() {
 
     // $icon_url = plugin_dir_url( __FILE__ ) . 'assets/favicon.png';
-        $icon_url = 'data:image/svg+xml;base64,' . base64_encode(file_get_contents(plugin_dir_path( __FILE__ ) . 'assets/favicon.svg'));
+    $icon_base64 = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMDI0IDEwMjQiPjxwYXRoIGZpbGw9IiMwZDE0MjYiIGQ9Ik0wIDBoMTAyNHYxMDI0SDB6Ii8+PHBhdGggZmlsbD0iIzE2YTM0YSIgZD0iTTYyNSAzNjZjLTQ1LTQyLTkyLTQ3LTE0Mi00NWwtNDIgMTgxczExNyA0OCAxMTcgMTEzYzAgNDgtODAgNjEtMTIwIDM3bS0zNy0xNTFjNjMgMzMgMTMzIDQ5IDIwMCA0OWwtNTIgMTYxeiIvPjxwYXRoIGZpbGw9IiNmZmYiIGQ9Ik0zOTggNzA0YzU4IDE5IDExNCAzMiAxNzIgMTkgMTEgMTcgMzEgMzYgNTEgNDgtMjkgNDgtMTAxIDgzLTE1NCA4Ny0xMzggMTEtMjUyLTEwMC0yNjQtMjM5LTctODUgMzQtMTYyIDk3LTIxNiA1OS01MSAxMzktNzMgMjE4LTcxTDQ3NiA1MTNjLTg5IDEyLTEzOCA5NS0xMjMgMTc4IDE0IDgxIDc1IDEzMiAxNDYgMTcxbS0yNi00MzFjMzEgMCA1NyAxMCA3OCAyNWwtMTUgMTg3Yy02OS0xOS0xMDgtMTE1LTYzLTIxMnoiLz48L3N2Zz4=';
 
     add_menu_page(
         'Clarif.io Dashboard', 
@@ -78,7 +78,7 @@ function clarifio_register_settings_page() {
         'manage_woocommerce', 
         'clarifio-settings', 
         'clarifio_settings_html', 
-        $icon_url, 
+        $icon_base64, 
         56
     );
 }
@@ -105,7 +105,7 @@ function clarifio_settings_html() {
             <div style="background: #fff; padding: 20px; border-left: 4px solid #2563eb; box-shadow: 0 1px 3px rgba(0,0,0,.05); margin-bottom: 20px; display: flex; align-items: center; justify-content: space-between;">
                 <div>
                     <h1 style="margin: 0; color: #1e293b; font-size: 24px; display: flex; align-items: center;">
-                        <img src="<?php echo $icon_url; ?>" alt="Clarif.io" style="width: 32px; height: 32px; margin-right: 10px;"> 
+                        <img src="<?php echo $icon_base64; ?>" alt="Clarif.io" style="width: 32px; height: 32px; margin-right: 10px;"> 
                         Clarif.io Workspace
                     </h1>
                     <p style="margin: 5px 0 0 0; color: #64748b; font-size: 14px;">Η καθημερινή σας οικονομική πυξίδα για το e-commerce.</p>
