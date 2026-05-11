@@ -2,9 +2,10 @@
 /**
  * Plugin Name: Clarif.io Connector
  * Description: Συνδέει το WooCommerce με το Clarif.io για τον υπολογισμό καθαρού κέρδους.
- * Version: 1.7
+ * Version: 1.8.0
  * Author: Clarif.io Team
  * Author URI: https://www.clarif.io
+ * 
  */
 
 if ( ! defined( 'ABSPATH' ) ) exit; // Ασφάλεια
@@ -67,13 +68,16 @@ function clarifio_init_plugin() {
 // 2. ΔΗΜΙΟΥΡΓΙΑ ΜΕΝΟΥ
 // ==========================================
 function clarifio_register_settings_page() {
+
+    $icon_url = plugin_dir_url( __FILE__ ) . 'assets/favicon.png';
+
     add_menu_page(
         'Clarif.io Dashboard', 
         'Clarif.io', 
         'manage_woocommerce', 
         'clarifio-settings', 
         'clarifio_settings_html', 
-        'dashicons-chart-area', 
+        $icon_url, 
         56
     );
 }
