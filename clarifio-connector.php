@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Clarif.io Connector
  * Description: Συνδέει το WooCommerce με το Clarif.io για τον υπολογισμό καθαρού κέρδους.
- * Version: 1.9
+ * Version: 1.10
  * Author: Clarif.io Team
  * Author URI: https://www.clarif.io
  * 
@@ -20,10 +20,12 @@ $myUpdateChecker = PucFactory::buildUpdateChecker(
     'clarifio-connector'
 );
 
-// 2. Επειδή το Repo θα είναι Private, βάζεις το GitHub Token
-$myUpdateChecker->setAuthentication('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');
+// ΣΗΜΑΝΤΙΚΟ: ΔΕΝ βάζουμε πλέον GitHub token εδώ -- οτιδήποτε μπει σε αυτό το αρχείο
+// στέλνεται σε κάθε πελάτη που εγκαθιστά το plugin, άρα ΔΕΝ μπορεί ποτέ να μείνει μυστικό.
+// Το repo www.github.com/dimitrisbatsi/clarifio-connector πρέπει να είναι PUBLIC για να
+// δουλεύουν τα auto-updates χωρίς authentication.
 
-// 3. (Προαιρετικό) Του λες να κοιτάει τα "Releases" στο GitHub και όχι τα απλά commits
+// 2. (Προαιρετικό) Του λες να κοιτάει τα "Releases" στο GitHub και όχι τα απλά commits
 // Αυτό προστατεύει τους πελάτες από το να πάρουν ημιτελή κώδικα.
 $myUpdateChecker->getVcsApi()->enableReleaseAssets();
 
@@ -61,6 +63,9 @@ function clarifio_init_plugin() {
     add_action('wp_ajax_clarifio_sync_products', 'clarifio_handle_sync');
     add_action('woocommerce_update_product', 'clarifio_sync_single_product_on_save', 10, 1);
     add_action('woocommerce_new_product', 'clarifio_sync_single_product_on_save', 10, 1);
+    // Το 'woocommerce_update_product' ΔΕΝ πυροδοτείται όταν αποθηκεύεται μεμονωμένη
+    // παραλλαγή (variation) -- χρειάζεται ξεχωριστό hook.
+    add_action('woocommerce_save_product_variation', 'clarifio_sync_single_product_on_save', 10, 1);
     add_action('wp_ajax_clarifio_get_orders_for_sync', 'clarifio_ajax_get_orders_for_sync');
     add_action('wp_ajax_clarifio_process_order_chunk', 'clarifio_ajax_process_order_chunk');
 }
@@ -461,10 +466,13 @@ function clarifio_settings_html() {
 // ΥΠΟΛΟΙΠΕΣ ΣΥΝΑΡΤΗΣΕΙΣ (Events, Sync, Log)
 // ==========================================
 function clarifio_trigger_order_webhook($order_id, $old_status, $new_status, $order) {
-    // Μας ενδιαφέρει να στείλουμε στο SaaS την παραγγελία αν μπει σε μία από αυτές τις καταστάσεις
-    $relevant_statuses = ['processing', 'completed', 'cancelled', 'refunded', 'on-hold'];
-    
-    if (in_array($new_status, $relevant_statuses)) {
+    // Στέλνουμε webhook για ΚΑΘΕ αλλαγή status εκτός από τα προκαταρκτικά states όπου η
+    // παραγγελία δεν έχει καν οριστικοποιηθεί. Έτσι καλύπτονται αυτόματα και τυχόν custom
+    // statuses από πρόσθετα τρίτων (π.χ. shipping/pickup plugins) χωρίς να χρειάζεται να τα
+    // ξέρουμε εκ των προτέρων -- το Clarif.io API ήδη τα διαχειρίζεται σωστά από μόνο του.
+    $excluded_statuses = ['pending', 'checkout-draft'];
+
+    if (!in_array($new_status, $excluded_statuses)) {
         clarifio_send_order_to_api($order_id);
     }
 }
@@ -580,6 +588,24 @@ function clarifio_handle_sync() {
     foreach ($products as $product) {
         $sku = clarifio_get_valid_sku($product);
         $payload[] = ['sku' => $sku, 'name' => $product->get_name(), 'costPrice' => clarifio_get_product_cost($product), 'retailPrice' => (float)$product->get_price()];
+
+        // Μεταβλητά προϊόντα (π.χ. Μέγεθος/Χρώμα): το wc_get_products() επιστρέφει μόνο το
+        // "γονικό" προϊόν, όχι τις παραλλαγές. Χωρίς αυτό, μια παραγγελία για συγκεκριμένη
+        // παραλλαγή δεν θα έβρισκε ταίριασμα SKU στον κατάλογο και το κόστος της θα έπεφτε
+        // σε 0 -- εμφανίζοντας τεχνητά μεγαλύτερο κέρδος απ' ό,τι πραγματικά υπάρχει.
+        if ($product->is_type('variable')) {
+            foreach ($product->get_children() as $variation_id) {
+                $variation = wc_get_product($variation_id);
+                if (!$variation) continue;
+
+                $payload[] = [
+                    'sku' => clarifio_get_valid_sku($variation),
+                    'name' => $variation->get_name(),
+                    'costPrice' => clarifio_get_product_cost($variation),
+                    'retailPrice' => (float)$variation->get_price()
+                ];
+            }
+        }
     }
 
     if (empty($payload)) wp_send_json_error('Δεν βρέθηκαν προϊόντα με SKU για συγχρονισμό.');
