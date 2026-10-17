@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Clarif.io Connector
  * Description: Συνδέει το WooCommerce με το Clarif.io για τον υπολογισμό καθαρού κέρδους.
- * Version: 1.10
+ * Version: 1.11
  * Author: Clarif.io Team
  * Author URI: https://www.clarif.io
  * 
@@ -30,6 +30,13 @@ $myUpdateChecker = PucFactory::buildUpdateChecker(
 $myUpdateChecker->getVcsApi()->enableReleaseAssets();
 
 define( 'CLARIFIO_API_BASE_URL', 'https://api.clarif.io' );
+
+// Δηλώνουμε συμβατότητα με το HPOS (High-Performance Order Storage) του WooCommerce.
+add_action('before_woocommerce_init', function () {
+    if (class_exists('\Automattic\WooCommerce\Utilities\FeaturesUtil')) {
+        \Automattic\WooCommerce\Utilities\FeaturesUtil::declare_compatibility('custom_order_tables', __FILE__, true);
+    }
+});
 
 // ==========================================
 // 0. ΕΛΕΓΧΟΣ ΕΞΑΡΤΗΣΕΩΝ (WOOCOMMERCE)
@@ -68,6 +75,9 @@ function clarifio_init_plugin() {
     add_action('woocommerce_save_product_variation', 'clarifio_sync_single_product_on_save', 10, 1);
     add_action('wp_ajax_clarifio_get_orders_for_sync', 'clarifio_ajax_get_orders_for_sync');
     add_action('wp_ajax_clarifio_process_order_chunk', 'clarifio_ajax_process_order_chunk');
+    // Background jobs (Action Scheduler) για το live sync παραγγελιών/προϊόντων
+    add_action('clarifio_process_order_sync', 'clarifio_run_order_sync', 10, 2);
+    add_action('clarifio_process_product_sync', 'clarifio_run_product_sync', 10, 1);
 }
 
 function clarifio_display_expired_notice() {
@@ -112,6 +122,24 @@ function clarifio_settings_html() {
     ?>
     
     <div class="wrap">
+        <script>
+        // Κοινά helpers για τα AJAX μηνύματα: μετατρέπουν ΟΠΟΙΟΔΗΠΟΤΕ σφάλμα (string, object, jqXHR) σε
+        // αναγνώσιμο κείμενο -- αλλιώς η σύνθεση με string έδινε "[object Object]".
+        window.clarifioErrText = function (e) {
+            if (!e) return 'Άγνωστο σφάλμα';
+            if (typeof e === 'string') return e;
+            if (e instanceof Error) return e.message;
+            if (e.responseJSON && e.responseJSON.data) return window.clarifioErrText(e.responseJSON.data);
+            if (e.status !== undefined && e.statusText !== undefined) return 'HTTP ' + e.status + ' ' + e.statusText;
+            if (e.message) return String(e.message);
+            if (e.Message) return String(e.Message);
+            try { return JSON.stringify(e); } catch (x) { return String(e); }
+        };
+        window.clarifioShow = function ($el, type, label, msg) {
+            var $p = jQuery('<p>').append(jQuery('<strong>').text(label + ' ')).append(document.createTextNode(msg));
+            $el.empty().append(jQuery('<div class="notice notice-' + type + ' inline" style="border-radius: 6px;">').append($p));
+        };
+        </script>
         <?php if (!empty($api_key)): ?>
             <div style="background: #fff; padding: 20px; border-left: 4px solid #2563eb; box-shadow: 0 1px 3px rgba(0,0,0,.05); margin-bottom: 20px; display: flex; align-items: center; justify-content: space-between;">
                 <div>
@@ -345,13 +373,13 @@ function clarifio_settings_html() {
                             $.post(ajaxurl, { action: 'clarifio_sync_products', security: clarifio_security_nonce }, function(response) {
                                 $btn.prop('disabled', false).html('<span class="dashicons dashicons-update-alt" style="margin-top: 5px;"></span> Έναρξη Συγχρονισμού Καταλόγου');
                                 if(response.success) {
-                                    $('#clarifio-sync-result').html('<div class="notice notice-success inline" style="border-radius: 6px;"><p>✅ <strong>Επιτυχία:</strong> '+response.data.message+'</p></div>');
+                                    clarifioShow($('#clarifio-sync-result'), 'success', '✅ Επιτυχία:', clarifioErrText(response.data.message || response.data));
                                 } else {
-                                    $('#clarifio-sync-result').html('<div class="notice notice-error inline" style="border-radius: 6px;"><p>❌ <strong>Σφάλμα:</strong> '+(response.data.Message || response.data || 'Άγνωστο λάθος')+'</p></div>');
+                                    clarifioShow($('#clarifio-sync-result'), 'error', '❌ Σφάλμα:', clarifioErrText(response.data));
                                 }
-                            }).fail(function() {
-                                $btn.prop('disabled', false).html('Έναρξη Συγχρονισμού Καταλόγου');
-                                $('#clarifio-sync-result').html('<div class="notice notice-error inline" style="border-radius: 6px;"><p>Αποτυχία επικοινωνίας με τον server.</p></div>');
+                            }).fail(function(xhr) {
+                                $btn.prop('disabled', false).html('<span class="dashicons dashicons-update-alt" style="margin-top: 5px;"></span> Έναρξη Συγχρονισμού Καταλόγου');
+                                clarifioShow($('#clarifio-sync-result'), 'error', '❌ Αποτυχία επικοινωνίας με τον server:', clarifioErrText(xhr));
                             });
                         });
                     });
@@ -393,10 +421,56 @@ function clarifio_settings_html() {
                     <div id="clarifio-sync-orders-result" style="margin-top: 20px;"></div>
 
                     <script>
-                    // Το JavaScript σου παραμένει ως έχει (μην ξεχάσεις να περνάς το security nonce στα $.post calls)
                     jQuery(document).ready(function($) {
-                        $('#clarifio-sync-orders-btn').on('click', async function(e) {
-                            // ... ο κώδικάς σου παραμένει ίδιος, βεβαιώσου απλά ότι έχεις βάλει security: clarifio_security_nonce ...
+                        var CHUNK_SIZE = 50;
+                        var $btn = $('#clarifio-sync-orders-btn');
+                        var $wrapper = $('#clarifio-progress-wrapper');
+                        var $result = $('#clarifio-sync-orders-result');
+
+                        function setProgress(done, total, text) {
+                            var pct = total > 0 ? Math.round((done / total) * 100) : 0;
+                            $('#clarifio-sync-status-text').text(text);
+                            $('#clarifio-sync-percent').text(pct + '%');
+                            $('#clarifio-progress-bar').css('width', pct + '%');
+                        }
+
+                        $btn.on('click', async function(e) {
+                            e.preventDefault();
+                            $btn.prop('disabled', true);
+                            $result.empty();
+                            $wrapper.show();
+                            setProgress(0, 0, 'Προετοιμασία δεδομένων...');
+
+                            var done = 0;
+                            var total = 0;
+                            try {
+                                var idsResponse = await $.post(ajaxurl, { action: 'clarifio_get_orders_for_sync', security: clarifio_security_nonce });
+                                if (!idsResponse.success) throw idsResponse.data;
+
+                                var ids = idsResponse.data.order_ids || [];
+                                total = ids.length;
+                                if (total === 0) {
+                                    $wrapper.hide();
+                                    clarifioShow($result, 'warning', 'ℹ️ Καμία παραγγελία:', 'Δεν βρέθηκαν παραγγελίες προς συγχρονισμό.');
+                                    return;
+                                }
+
+                                for (var i = 0; i < total; i += CHUNK_SIZE) {
+                                    var chunk = ids.slice(i, i + CHUNK_SIZE);
+                                    setProgress(done, total, 'Αποστολή παραγγελιών ' + (i + 1) + '–' + (i + chunk.length) + ' από ' + total + '...');
+                                    var chunkResponse = await $.post(ajaxurl, { action: 'clarifio_process_order_chunk', security: clarifio_security_nonce, order_ids: chunk });
+                                    if (!chunkResponse.success) throw chunkResponse.data;
+                                    done += chunk.length;
+                                }
+
+                                setProgress(total, total, 'Ολοκληρώθηκε');
+                                clarifioShow($result, 'success', '✅ Επιτυχία:', 'Συγχρονίστηκαν ' + done + ' παραγγελίες στο Clarif.io.');
+                            } catch (err) {
+                                // Σταματάμε στο πρώτο σφάλμα (π.χ. 402 όριο/λήξη συνδρομής) για να μη στέλνουμε άσκοπα τα υπόλοιπα τμήματα.
+                                clarifioShow($result, 'error', '❌ Διακοπή μετά από ' + done + ' από ' + total + ' παραγγελίες:', clarifioErrText(err));
+                            } finally {
+                                $btn.prop('disabled', false);
+                            }
                         });
                     });
                     </script>
@@ -408,7 +482,7 @@ function clarifio_settings_html() {
                 <div style="max-width: 100%;">
                     <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #e2e8f0; padding-bottom: 10px; margin-bottom: 20px;">
                         <h2 style="margin: 0; font-size: 20px; color: #0f172a;">Αρχείο Καταγραφής Συμβάντων (Logs)</h2>
-                        <span style="color: #64748b; font-size: 13px;">Διατηρούνται οι τελευταίες 20 εγγραφές</span>
+                        <span style="color: #64748b; font-size: 13px;">Διατηρούνται οι τελευταίες 50 εγγραφές</span>
                     </div>
                     <p style="color: #64748b; font-size: 14px;">Χρησιμοποιήστε αυτή την οθόνη για έλεγχο ορθής λειτουργίας (troubleshooting) ή στείλτε ένα στιγμιότυπο στην υποστήριξη του Clarif.io σε περίπτωση προβλήματος.</p>
                     
@@ -418,7 +492,7 @@ function clarifio_settings_html() {
                                 <th style="width: 160px; font-weight: 600; color: #1e293b;">Timestamp</th>
                                 <th style="font-weight: 600; color: #1e293b;">Συμβάν (Event)</th>
                                 <th style="width: 120px; font-weight: 600; color: #1e293b;">Κατάσταση</th>
-                                <th style="width: 150px; font-weight: 600; color: #1e293b;">Ανάλυση Payload</th>
+                                <th style="width: 38%; font-weight: 600; color: #1e293b;">Λεπτομέρειες (αίτημα / απάντηση)</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -428,34 +502,35 @@ function clarifio_settings_html() {
                                 echo '<tr><td colspan="4" style="text-align: center; padding: 30px; color: #64748b;">Δεν έχουν καταγραφεί ακόμη ενέργειες επικοινωνίας.</td></tr>';
                             } else {
                                 foreach ($logs as $log) : 
-                                    $is_success = ($log['code'] === 'Async' || ($log['code'] >= 200 && $log['code'] < 300));
+                                    $code_num = is_numeric($log['code']) ? (int) $log['code'] : 0;
+                                    $is_success = ($log['code'] === 'Async' || ($code_num >= 200 && $code_num < 300));
                                     $status_color = $is_success ? '#10b981' : '#ef4444';
                                     $status_bg = $is_success ? '#ecfdf5' : '#fef2f2';
+                                    $status_label = ($log['code'] === 'Async' || $code_num > 0) ? $log['code'] : 'Χωρίς απάντηση';
                                 ?>
                                     <tr>
                                         <td style="color: #475569; font-size: 13px;"><?php echo esc_html($log['time']); ?></td>
                                         <td style="font-weight: 500; color: #334155;"><?php echo esc_html($log['event']); ?></td>
                                         <td>
                                             <span style="background: <?php echo $status_bg; ?>; color: <?php echo $status_color; ?>; padding: 4px 10px; border-radius: 999px; font-size: 12px; font-weight: 600;">
-                                                <?php echo esc_html($log['code']); ?>
+                                                <?php echo esc_html($status_label); ?>
                                             </span>
                                         </td>
-                                        <td><button type="button" class="button view-json" data-json='<?php echo esc_attr($log['payload']); ?>' style="font-size: 12px; border-radius: 4px;">Επιθεώρηση JSON</button></td>
+                                        <td>
+                                            <details>
+                                                <summary style="cursor: pointer; color: #2563eb; font-size: 12px;">Προβολή</summary>
+                                                <p style="margin: 10px 0 4px 0; font-weight: 600; font-size: 12px;">Αίτημα</p>
+                                                <pre style="max-height: 220px; overflow: auto; white-space: pre-wrap; word-break: break-all; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 8px; font-size: 11px;"><?php echo esc_html(clarifio_pretty_json($log['payload'])); ?></pre>
+                                                <p style="margin: 10px 0 4px 0; font-weight: 600; font-size: 12px;">Απάντηση</p>
+                                                <pre style="max-height: 220px; overflow: auto; white-space: pre-wrap; word-break: break-all; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 8px; font-size: 11px;"><?php echo esc_html(isset($log['response']) && $log['response'] !== '' ? clarifio_pretty_json($log['response']) : '(καμία απάντηση)'); ?></pre>
+                                            </details>
+                                        </td>
                                     </tr>
                                 <?php endforeach; 
                             } ?>
                         </tbody>
                     </table>
                 </div>
-                <script>
-                jQuery(document).ready(function($) {
-                    $('.view-json').on('click', function() {
-                        var jsonStr = $(this).data('json');
-                        try { alert("Payload Δεδομένων:\n\n" + JSON.stringify(JSON.parse(jsonStr), null, 4)); } 
-                        catch (e) { alert("Ακατέργαστα δεδομένα:\n\n" + jsonStr); }
-                    });
-                });
-                </script>
             <?php endif; ?>
         </div>
     </div>
@@ -465,30 +540,59 @@ function clarifio_settings_html() {
 // ==========================================
 // ΥΠΟΛΟΙΠΕΣ ΣΥΝΑΡΤΗΣΕΙΣ (Events, Sync, Log)
 // ==========================================
-function clarifio_trigger_order_webhook($order_id, $old_status, $new_status, $order) {
-    // Στέλνουμε webhook για ΚΑΘΕ αλλαγή status εκτός από τα προκαταρκτικά states όπου η
-    // παραγγελία δεν έχει καν οριστικοποιηθεί. Έτσι καλύπτονται αυτόματα και τυχόν custom
-    // statuses από πρόσθετα τρίτων (π.χ. shipping/pickup plugins) χωρίς να χρειάζεται να τα
-    // ξέρουμε εκ των προτέρων -- το Clarif.io API ήδη τα διαχειρίζεται σωστά από μόνο του.
-    $excluded_statuses = ['pending', 'checkout-draft'];
 
-    if (!in_array($new_status, $excluded_statuses)) {
-        clarifio_send_order_to_api($order_id);
+// Κεντρική κλήση προς το Clarif.io API. Είναι ΠΑΝΤΑ blocking, ώστε να καταγράφεται η πραγματική
+// απάντηση (κωδικός + body). Το προηγούμενο fire-and-forget έκρυβε κάθε σφάλμα (401/402/403/500)
+// και δεν άφηνε κανένα ίχνος στα logs.
+function clarifio_api_post($path, $payload, $timeout = 15) {
+    $response = wp_remote_post(CLARIFIO_API_BASE_URL . $path, [
+        'headers'   => ['Content-Type' => 'application/json', 'X-Clarifio-ApiKey' => get_option('clarifio_api_key'), 'X-Clarifio-Store-Url' => home_url()],
+        'body'      => wp_json_encode($payload),
+        'timeout'   => $timeout,
+        'sslverify' => true
+    ]);
+
+    clarifio_check_api_response_for_expiration($response);
+
+    if (is_wp_error($response)) {
+        return ['code' => 0, 'body' => $response->get_error_message(), 'ok' => false];
     }
+
+    $code = (int) wp_remote_retrieve_response_code($response);
+    return ['code' => $code, 'body' => wp_remote_retrieve_body($response), 'ok' => ($code >= 200 && $code < 300)];
 }
 
-function clarifio_send_order_to_api($order_id) {
-    $order = wc_get_order($order_id);
-    $api_key = get_option('clarifio_api_key');
-    if (!$api_key || !$order) return;
+// Αναγνώσιμο μήνυμα σφάλματος από το αποτέλεσμα του clarifio_api_post().
+function clarifio_api_error_message($result) {
+    $decoded = json_decode($result['body'], true);
+    if (is_array($decoded)) {
+        foreach (['message', 'Message', 'title'] as $key) {
+            if (!empty($decoded[$key]) && is_string($decoded[$key])) return $decoded[$key];
+        }
+    }
 
+    $body = trim((string) $result['body']);
+    if ($body !== '') return mb_substr($body, 0, 300);
+
+    return $result['code'] ? 'HTTP ' . $result['code'] : 'Αδυναμία επικοινωνίας με το Clarif.io';
+}
+
+function clarifio_pretty_json($text) {
+    $decoded = json_decode((string) $text, true);
+    if (is_array($decoded)) {
+        return wp_json_encode($decoded, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    }
+    return (string) $text;
+}
+
+function clarifio_build_order_payload($order) {
     $items = [];
-    foreach ($order->get_items() as $item_id => $item) {
+    foreach ($order->get_items() as $item) {
         $product = $item->get_product();
         $items[] = [
             'sku' => clarifio_get_valid_sku($product),
-            'quantity' => (int)$item->get_quantity(),
-            'totalPrice' => (float)$item->get_total()
+            'quantity' => (int) $item->get_quantity(),
+            'totalPrice' => (float) $item->get_total()
         ];
     }
 
@@ -498,18 +602,18 @@ function clarifio_send_order_to_api($order_id) {
 
     if ($woo_customer_id > 0) {
         $user = get_userdata($woo_customer_id);
-        if ($user && !empty($user->roles)) {
-            $customer_role = $user->roles[0]; // π.χ. 'customer', 'wholesale_customer' κτλ.
-        } else {
-            $customer_role = 'customer';
-        }
+        $customer_role = ($user && !empty($user->roles)) ? $user->roles[0] : 'customer'; // π.χ. 'customer', 'wholesale_customer' κτλ.
     }
 
-    $payload = [
-        'orderId' => (int)$order_id,
-        'orderDate' => $order->get_date_created() ? $order->get_date_created()->date('Y-m-d\TH:i:s\Z') : null,
-        'total' => (float)$order->get_total(),
-        'shipping' => (float)$order->get_shipping_total(),
+    $created = $order->get_date_created();
+
+    return [
+        'orderId' => (int) $order->get_id(),
+        // Στέλνουμε πραγματικό UTC timestamp. Πριν, η ώρα του site (π.χ. Ελλάδα, UTC+2/+3) μαρκαριζόταν
+        // λανθασμένα ως UTC και οι παραγγελίες γύρω από τα μεσάνυχτα έπεφταν σε λάθος ημέρα.
+        'orderDate' => $created ? gmdate('Y-m-d\TH:i:s\Z', $created->getTimestamp()) : null,
+        'total' => (float) $order->get_total(),
+        'shipping' => (float) $order->get_shipping_total(),
         'status' => $order->get_status(),
         'paymentMethod' => $order->get_payment_method(),
         'customerEmail' => $order->get_billing_email(),
@@ -519,19 +623,48 @@ function clarifio_send_order_to_api($order_id) {
         'wooCustomerId' => $woo_customer_id > 0 ? $woo_customer_id : null,
         'items' => $items
     ];
+}
 
-    $response = wp_remote_post(CLARIFIO_API_BASE_URL .'/api/v1/webhook/order-event', [
-        'method'    => 'POST',
-        'headers'   => ['Content-Type' => 'application/json', 'X-Clarifio-ApiKey' => $api_key, 'X-Clarifio-Store-Url' => home_url()],
-        'body'      => json_encode($payload),
-        'timeout'   => 15,
-        'blocking'  => false, // Αρχιτεκτονικός Κανόνας: Fire and Forget
-        'sslverify' => true
-    ]);
+function clarifio_trigger_order_webhook($order_id, $old_status, $new_status, $order) {
+    // Στέλνουμε webhook για ΚΑΘΕ αλλαγή status εκτός από τα states όπου η παραγγελία δεν αποτελεί
+    // πώληση (δεν έχει οριστικοποιηθεί ή η πληρωμή απέτυχε). Έτσι καλύπτονται αυτόματα και τυχόν
+    // custom statuses από πρόσθετα τρίτων (π.χ. shipping/pickup plugins).
+    if (!in_array($new_status, clarifio_excluded_order_statuses(), true)) {
+        clarifio_queue_order_sync($order_id);
+    }
+}
 
-    clarifio_check_api_response_for_expiration($response);
+function clarifio_excluded_order_statuses() {
+    return ['pending', 'checkout-draft', 'failed'];
+}
 
-    clarifio_log_event("Order Webhook (#$order_id)", json_encode($payload), wp_remote_retrieve_response_code($response), wp_remote_retrieve_body($response));
+// Το live sync τρέχει στο παρασκήνιο μέσω Action Scheduler (ενσωματωμένο στο WooCommerce): ο πελάτης
+// δεν περιμένει την κλήση στο checkout και τα προσωρινά σφάλματα ξαναδοκιμάζονται αυτόματα.
+function clarifio_queue_order_sync($order_id, $attempt = 1) {
+    if (!get_option('clarifio_api_key')) return;
+
+    if (function_exists('as_enqueue_async_action')) {
+        as_enqueue_async_action('clarifio_process_order_sync', [(int) $order_id, (int) $attempt], 'clarifio');
+    } else {
+        clarifio_run_order_sync($order_id, $attempt);
+    }
+}
+
+function clarifio_run_order_sync($order_id, $attempt = 1) {
+    $order = wc_get_order($order_id);
+    if (!$order || !get_option('clarifio_api_key')) return;
+
+    $payload = clarifio_build_order_payload($order);
+    $result = clarifio_api_post('/api/v1/webhook/order-event', $payload);
+
+    clarifio_log_event("Order Webhook (#$order_id, προσπάθεια $attempt)", wp_json_encode($payload), $result['code'], $result['body']);
+
+    // Ξαναδοκιμάζουμε μόνο σε σφάλμα δικτύου ή 5xx. Τα 4xx (άκυρο key, λήξη συνδρομής, origin mismatch)
+    // δεν θα διορθωθούν μόνα τους, οπότε μένουν στα logs για να τα δει ο χρήστης.
+    $retryable = ($result['code'] === 0 || $result['code'] >= 500);
+    if ($retryable && $attempt < 4 && function_exists('as_schedule_single_action')) {
+        as_schedule_single_action(time() + (60 * pow(2, $attempt)), 'clarifio_process_order_sync', [(int) $order_id, (int) $attempt + 1], 'clarifio');
+    }
 }
 
 function clarifio_add_cost_field() {
@@ -559,15 +692,24 @@ function clarifio_get_product_cost($product) {
 
 function clarifio_get_valid_sku($product) {
     if (!$product) return 'deleted-product';
-    
+
     $sku = $product->get_sku();
-    
+
     // Αν το SKU είναι κενό, δημιουργούμε ένα εικονικό βάσει του ID
     if (empty($sku)) {
         return 'WC-' . $product->get_id();
     }
-    
+
     return $sku;
+}
+
+function clarifio_build_product_row($product) {
+    return [
+        'sku' => clarifio_get_valid_sku($product),
+        'name' => $product->get_name(),
+        'costPrice' => clarifio_get_product_cost($product),
+        'retailPrice' => (float) $product->get_price()
+    ];
 }
 
 function clarifio_handle_sync() {
@@ -579,15 +721,13 @@ function clarifio_handle_sync() {
         wp_send_json_error('Μη εξουσιοδοτημένη πρόσβαση.');
     }
 
-    $api_key = get_option('clarifio_api_key');
-    if (empty($api_key)) wp_send_json_error('Δεν έχει οριστεί API Key.');
+    if (!get_option('clarifio_api_key')) wp_send_json_error('Δεν έχει οριστεί API Key.');
 
     $products = wc_get_products(['status' => 'publish', 'limit' => -1, 'return' => 'objects']);
     $payload = [];
 
     foreach ($products as $product) {
-        $sku = clarifio_get_valid_sku($product);
-        $payload[] = ['sku' => $sku, 'name' => $product->get_name(), 'costPrice' => clarifio_get_product_cost($product), 'retailPrice' => (float)$product->get_price()];
+        $payload[] = clarifio_build_product_row($product);
 
         // Μεταβλητά προϊόντα (π.χ. Μέγεθος/Χρώμα): το wc_get_products() επιστρέφει μόνο το
         // "γονικό" προϊόν, όχι τις παραλλαγές. Χωρίς αυτό, μια παραγγελία για συγκεκριμένη
@@ -596,65 +736,68 @@ function clarifio_handle_sync() {
         if ($product->is_type('variable')) {
             foreach ($product->get_children() as $variation_id) {
                 $variation = wc_get_product($variation_id);
-                if (!$variation) continue;
-
-                $payload[] = [
-                    'sku' => clarifio_get_valid_sku($variation),
-                    'name' => $variation->get_name(),
-                    'costPrice' => clarifio_get_product_cost($variation),
-                    'retailPrice' => (float)$variation->get_price()
-                ];
+                if ($variation) $payload[] = clarifio_build_product_row($variation);
             }
         }
     }
 
-    if (empty($payload)) wp_send_json_error('Δεν βρέθηκαν προϊόντα με SKU για συγχρονισμό.');
+    if (empty($payload)) wp_send_json_error('Δεν βρέθηκαν προϊόντα για συγχρονισμό.');
 
-    $response = wp_remote_post(CLARIFIO_API_BASE_URL . '/api/v1/Products/bulk-sync', [
-        'headers' => ['Content-Type' => 'application/json', 'X-Clarifio-ApiKey' => $api_key, 'X-Clarifio-Store-Url' => home_url()],
-        'body' => json_encode($payload),
-        'timeout' => 45,
-        'sslverify' => true
-    ]);
+    $result = clarifio_api_post('/api/v1/Products/bulk-sync', $payload, 45);
 
-    clarifio_check_api_response_for_expiration($response);
+    // Στα logs αποθηκεύουμε σύνοψη (πλήθος + δείγμα) και όχι ολόκληρο τον κατάλογο.
+    clarifio_log_event(
+        'Product Sync (χειροκίνητος, ' . count($payload) . ' προϊόντα)',
+        wp_json_encode(['count' => count($payload), 'sample' => array_slice($payload, 0, 3)]),
+        $result['code'],
+        $result['body']
+    );
 
-    if (is_wp_error($response)) wp_send_json_error($response->get_error_message());
+    if ($result['ok']) {
+        wp_send_json_success(['message' => 'Στάλθηκαν επιτυχώς ' . count($payload) . ' προϊόντα!']);
+    }
 
-    $status_code = wp_remote_retrieve_response_code($response);
-    if ($status_code >= 200 && $status_code < 300) wp_send_json_success(['message' => 'Στάλθηκαν επιτυχώς ' . count($payload) . ' προϊόντα!']);
-    else wp_send_json_error("Το API επέστρεψε κωδικό $status_code. Λεπτομέρειες: " . wp_remote_retrieve_body($response));
+    wp_send_json_error('Το API επέστρεψε κωδικό ' . $result['code'] . ': ' . clarifio_api_error_message($result));
 }
 
 function clarifio_log_event($event_name, $request_body, $response_code, $response_body) {
     $logs = get_option('clarifio_debug_logs', []);
-    if (count($logs) >= 20) array_shift($logs);
-    $logs[] = ['time' => current_time('mysql'), 'event' => $event_name, 'payload' => $request_body, 'code' => $response_code, 'response' => $response_body];
-    update_option('clarifio_debug_logs', $logs);
+    if (!is_array($logs)) $logs = [];
+
+    $logs[] = [
+        'time'     => current_time('mysql'),
+        'event'    => $event_name,
+        'payload'  => mb_substr((string) $request_body, 0, 6000),
+        'code'     => $response_code,
+        'response' => mb_substr((string) $response_body, 0, 2000)
+    ];
+
+    // autoload=false: τα logs δεν πρέπει να φορτώνονται σε κάθε request του site.
+    update_option('clarifio_debug_logs', array_slice($logs, -50), false);
 }
 
+// Ενημέρωση προϊόντος: στο παρασκήνιο, με dedupe ώστε πολλαπλά saves του ίδιου προϊόντος
+// (π.χ. μεταβολές αποθέματος από παραγγελίες) να μη δημιουργούν δεκάδες κλήσεις.
 function clarifio_sync_single_product_on_save($product_id) {
-    $api_key = get_option('clarifio_api_key');
-    if (empty($api_key)) return;
+    if (!get_option('clarifio_api_key')) return;
 
+    if (function_exists('as_enqueue_async_action')) {
+        $args = [(int) $product_id];
+        if (function_exists('as_has_scheduled_action') && as_has_scheduled_action('clarifio_process_product_sync', $args, 'clarifio')) return;
+        as_enqueue_async_action('clarifio_process_product_sync', $args, 'clarifio');
+    } else {
+        clarifio_run_product_sync($product_id);
+    }
+}
+
+function clarifio_run_product_sync($product_id) {
     $product = wc_get_product($product_id);
-    if (!$product) return;
+    if (!$product || !get_option('clarifio_api_key')) return;
 
-    $sku = clarifio_get_valid_sku($product);
-    if (empty($sku)) return;
+    $row = clarifio_build_product_row($product);
+    $result = clarifio_api_post('/api/v1/Products/bulk-sync', [$row]);
 
-    $payload = [['sku' => $sku, 'name' => $product->get_name(), 'costPrice' => clarifio_get_product_cost($product), 'retailPrice' => (float)$product->get_price()]];
-
-    wp_remote_post(CLARIFIO_API_BASE_URL . '/api/v1/Products/bulk-sync', [
-        'method'    => 'POST',
-        'headers'   => ['Content-Type' => 'application/json', 'X-Clarifio-ApiKey' => $api_key, 'X-Clarifio-Store-Url' => home_url()],
-        'body'      => json_encode($payload),
-        'timeout'   => 5,
-        'blocking'  => false, 
-        'sslverify' => true
-    ]);
-
-    clarifio_log_event("Product Auto-Sync (#$product_id - $sku)", json_encode($payload), 'Async', 'Εστάλη στο παρασκήνιο (Background process)');
+    clarifio_log_event("Product Auto-Sync (#$product_id - {$row['sku']})", wp_json_encode([$row]), $result['code'], $result['body']);
 }
 
 // ==========================================
@@ -663,7 +806,7 @@ function clarifio_sync_single_product_on_save($product_id) {
 
 // Βήμα 1: Επιστρέφει μόνο τα IDs για να μην βαρύνει η μνήμη
 function clarifio_ajax_get_orders_for_sync() {
-// 1. Έλεγχος Nonce (CSRF Protection)
+    // 1. Έλεγχος Nonce (CSRF Protection)
     check_ajax_referer('clarifio_ajax_nonce', 'security');
 
     // 2. Έλεγχος Δικαιωμάτων (Μόνο Admin/Shop Manager)
@@ -671,9 +814,13 @@ function clarifio_ajax_get_orders_for_sync() {
         wp_send_json_error('Μη εξουσιοδοτημένη πρόσβαση.');
     }
 
+    // Ίδια λογική με το live sync: όλα τα statuses (και τα custom) εκτός από όσα δεν αποτελούν πώληση.
+    $excluded = array_map(function ($s) { return 'wc-' . $s; }, clarifio_excluded_order_statuses());
+    $statuses = array_values(array_diff(array_keys(wc_get_order_statuses()), $excluded));
+
     $orders = wc_get_orders([
-        'limit'  => -1, // Παίρνουμε όλες (ή βάλε όριο π.χ. 2000)
-        'status'  => ['completed', 'processing', 'on-hold', 'cancelled', 'refunded'],
+        'limit'  => -1,
+        'status'  => $statuses,
         'return' => 'ids',
         'orderby' => 'date',
         'order' => 'DESC'
@@ -692,94 +839,43 @@ function clarifio_ajax_process_order_chunk() {
         wp_send_json_error('Μη εξουσιοδοτημένη πρόσβαση.');
     }
 
-    $api_key = get_option('clarifio_api_key');
-    if (empty($api_key)) wp_send_json_error('Δεν έχει οριστεί API Key.');
+    if (!get_option('clarifio_api_key')) wp_send_json_error('Δεν έχει οριστεί API Key.');
 
-    $order_ids = isset($_POST['order_ids']) ? array_map('intval', $_POST['order_ids']) : [];
+    $order_ids = isset($_POST['order_ids']) ? array_map('intval', (array) $_POST['order_ids']) : [];
     if (empty($order_ids)) wp_send_json_error('Δεν δόθηκαν παραγγελίες προς επεξεργασία.');
 
     $payload = [];
-
     foreach ($order_ids as $order_id) {
         $order = wc_get_order($order_id);
-        if (!$order) continue;
-
-        $items = [];
-        foreach ($order->get_items() as $item) {
-            $product = $item->get_product();
-            $items[] = [
-                'sku' => clarifio_get_valid_sku($product),
-                'quantity' => (int)$item->get_quantity(),
-                'totalPrice' => (float)$item->get_total()
-            ];
-        }
-
-        // --- ΕΞΑΓΩΓΗ ΣΤΟΙΧΕΙΩΝ ΠΕΛΑΤΗ ---
-        $woo_customer_id = $order->get_customer_id();
-        $customer_role = 'guest';
-
-        if ($woo_customer_id > 0) {
-            $user = get_userdata($woo_customer_id);
-            if ($user && !empty($user->roles)) {
-                $customer_role = $user->roles[0];
-            } else {
-                $customer_role = 'customer';
-            }
-        }
-
-        $payload[] = [
-            'orderId' => (int)$order_id,
-            'orderDate' => $order->get_date_created() ? $order->get_date_created()->date('Y-m-d\TH:i:s\Z') : null,
-            'total' => (float)$order->get_total(),
-            'shipping' => (float)$order->get_shipping_total(),
-            'status' => $order->get_status(),
-            'paymentMethod' => $order->get_payment_method(),
-            'customerEmail' => $order->get_billing_email(),
-            'customerFirstName' => $order->get_billing_first_name(),
-            'customerLastName' => $order->get_billing_last_name(),
-            'customerRole' => $customer_role,
-            'wooCustomerId' => $woo_customer_id > 0 ? $woo_customer_id : null,
-            'items' => $items
-        ];
+        if ($order) $payload[] = clarifio_build_order_payload($order);
     }
 
-    // Κλήση στο νέο endpoint του .NET
-    $response = wp_remote_post(CLARIFIO_API_BASE_URL . '/api/v1/webhook/bulk-sync-orders', [
-        'headers'   => ['Content-Type' => 'application/json', 'X-Clarifio-ApiKey' => $api_key, 'X-Clarifio-Store-Url' => home_url()],
-        'body'      => json_encode($payload),
-        'timeout'   => 45, // Μεγάλο timeout γιατί στέλνουμε 50 παραγγελίες
-        'sslverify' => true
-    ]);
+    $result = clarifio_api_post('/api/v1/webhook/bulk-sync-orders', $payload, 45);
 
-    clarifio_check_api_response_for_expiration($response);
+    $summary = wp_json_encode(['orders' => count($payload), 'first_id' => $order_ids[0], 'last_id' => end($order_ids)]);
+    clarifio_log_event('Bulk Sync Orders (' . count($payload) . ' παραγγελίες)', $summary, $result['code'], $result['body']);
 
-    if (is_wp_error($response)) {
-        wp_send_json_error("Σφάλμα σύνδεσης: " . $response->get_error_message());
+    if (!$result['ok']) {
+        // π.χ. 402 υπέρβαση ορίου/λήξη συνδρομής, 403 origin mismatch, 401 άκυρο API key
+        wp_send_json_error('Το API επέστρεψε κωδικό ' . $result['code'] . ': ' . clarifio_api_error_message($result));
     }
 
-    $status_code = wp_remote_retrieve_response_code($response);
-    $response_body = wp_remote_retrieve_body($response);
-
-    if ($status_code >= 200 && $status_code < 300) {
-        // Επιτυχία! Μαρκάρουμε τις παραγγελίες ότι συγχρονίστηκαν (προαιρετικό αλλά καλό)
-        foreach ($order_ids as $oid) {
-            update_post_meta($oid, '_clarifio_sync_status', 'yes');
+    // Μαρκάρουμε τις παραγγελίες ως συγχρονισμένες. Μέσω του order object (όχι update_post_meta),
+    // ώστε να δουλεύει σωστά και με HPOS.
+    foreach ($order_ids as $oid) {
+        $o = wc_get_order($oid);
+        if ($o) {
+            $o->update_meta_data('_clarifio_sync_status', 'yes');
+            $o->save_meta_data();
         }
-        clarifio_log_event("Bulk Sync Orders (Chunk of " . count($order_ids) . ")", "Data length: " . strlen(json_encode($payload)), $status_code, "Success");
-        wp_send_json_success('Chunk processed');
-    } else {
-        // Αν το API επιστρέψει Error (π.χ. Υπέρβαση ορίου συνδρομής 402)
-        $error_msg = json_decode($response_body);
-        $final_error = isset($error_msg->message) ? $error_msg->message : "Άγνωστο σφάλμα HTTP $status_code";
-        
-        clarifio_log_event("Bulk Sync Orders FAILED", "Data length: " . strlen(json_encode($payload)), $status_code, $response_body);
-        wp_send_json_error($final_error);
     }
+
+    wp_send_json_success('Chunk processed');
 }
 
 function clarifio_check_api_response_for_expiration($response) {
     if (!is_wp_error($response)) {
-        $status_code = wp_remote_retrieve_response_code($response);
+        $status_code = (int) wp_remote_retrieve_response_code($response);
         if ($status_code === 402) {
             update_option('clarifio_subscription_expired', 'yes');
         } elseif ($status_code === 200 || $status_code === 201) {
