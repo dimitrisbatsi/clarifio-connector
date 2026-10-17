@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Clarif.io Connector
  * Description: Συνδέει το WooCommerce με το Clarif.io για τον υπολογισμό καθαρού κέρδους.
- * Version: 1.11
+ * Version: 1.12
  * Author: Clarif.io Team
  * Author URI: https://www.clarif.io
  * 
@@ -613,6 +613,8 @@ function clarifio_build_order_payload($order) {
         // λανθασμένα ως UTC και οι παραγγελίες γύρω από τα μεσάνυχτα έπεφταν σε λάθος ημέρα.
         'orderDate' => $created ? gmdate('Y-m-d\TH:i:s\Z', $created->getTimestamp()) : null,
         'total' => (float) $order->get_total(),
+        // Συνολικό ΦΠΑ (προϊόντα + μεταφορικά): το Clarif.io το αφαιρεί από τον τζίρο και το κέρδος.
+        'totalTax' => (float) $order->get_total_tax(),
         'shipping' => (float) $order->get_shipping_total(),
         'status' => $order->get_status(),
         'paymentMethod' => $order->get_payment_method(),
@@ -687,7 +689,14 @@ function clarifio_get_product_cost($product) {
     $manual_cost = get_post_meta($product->get_id(), '_clarifio_cost', true);
     if (!empty($manual_cost)) return floatval($manual_cost);
     $default_perc = floatval(get_option('clarifio_default_cost_perc', 60)) / 100;
-    return floatval($product->get_price()) * $default_perc;
+    return clarifio_get_price_ex_tax($product) * $default_perc;
+}
+
+// Τιμή χωρίς ΦΠΑ, ανεξάρτητα από το αν το κατάστημα εισάγει τιμές με ή χωρίς ΦΠΑ. Το κόστος αγοράς
+// δεν περιέχει ΦΠΑ, οπότε το fallback % πρέπει να εφαρμόζεται στην τιμή προ ΦΠΑ.
+function clarifio_get_price_ex_tax($product) {
+    if ($product->get_price() === '' || $product->get_price() === null) return 0.0;
+    return (float) wc_get_price_excluding_tax($product);
 }
 
 function clarifio_get_valid_sku($product) {
@@ -708,7 +717,7 @@ function clarifio_build_product_row($product) {
         'sku' => clarifio_get_valid_sku($product),
         'name' => $product->get_name(),
         'costPrice' => clarifio_get_product_cost($product),
-        'retailPrice' => (float) $product->get_price()
+        'retailPrice' => clarifio_get_price_ex_tax($product)
     ];
 }
 
