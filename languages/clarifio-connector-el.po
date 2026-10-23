@@ -1,6 +1,6 @@
 msgid ""
 msgstr ""
-"Project-Id-Version: Clarif.io Connector 1.13\n"
+"Project-Id-Version: Clarif.io Connector 1.13.1\n"
 "Report-Msgid-Bugs-To: https://www.clarif.io\n"
 "Language: el\n"
 "MIME-Version: 1.0\n"

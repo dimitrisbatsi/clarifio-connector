@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Clarif.io Connector
  * Description: Connects WooCommerce to Clarif.io to calculate net profit.
- * Version: 1.13
+ * Version: 1.13.1
  * Text Domain: clarifio-connector
  * Domain Path: /languages
  * Author: Clarif.io Team
