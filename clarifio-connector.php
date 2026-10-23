@@ -33,7 +33,7 @@ $myUpdateChecker->getVcsApi()->enableReleaseAssets();
 
 define( 'CLARIFIO_API_BASE_URL', 'https://api.clarif.io' );
 
-// Μεταφράσεις: τα αγγλικά είναι η γλώσσα του κώδικα, τα ελληνικά ζουν στο /languages (clarifio-connector-el_GR.mo).
+// Μεταφράσεις: τα αγγλικά είναι η γλώσσα του κώδικα, τα ελληνικά ζουν στο /languages (clarifio-connector-el.mo).
 add_action('init', function () {
     load_plugin_textdomain('clarifio-connector', false, dirname(plugin_basename(__FILE__)) . '/languages');
 });
