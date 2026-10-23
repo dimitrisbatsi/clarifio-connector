@@ -1,8 +1,10 @@
 <?php
 /**
  * Plugin Name: Clarif.io Connector
- * Description: Συνδέει το WooCommerce με το Clarif.io για τον υπολογισμό καθαρού κέρδους.
- * Version: 1.12
+ * Description: Connects WooCommerce to Clarif.io to calculate net profit.
+ * Version: 1.13
+ * Text Domain: clarifio-connector
+ * Domain Path: /languages
  * Author: Clarif.io Team
  * Author URI: https://www.clarif.io
  * 
@@ -31,6 +33,19 @@ $myUpdateChecker->getVcsApi()->enableReleaseAssets();
 
 define( 'CLARIFIO_API_BASE_URL', 'https://api.clarif.io' );
 
+// Μεταφράσεις: τα αγγλικά είναι η γλώσσα του κώδικα, τα ελληνικά ζουν στο /languages (clarifio-connector-el_GR.mo).
+add_action('init', function () {
+    load_plugin_textdomain('clarifio-connector', false, dirname(plugin_basename(__FILE__)) . '/languages');
+});
+
+// Σύνδεσμος προς το app με τη γλώσσα του admin (?lang=), ώστε να ανοίγει στην ίδια γλώσσα.
+function clarifio_app_url($path = '/') {
+    $lang = strpos(get_user_locale(), 'el') === 0 ? 'el' : 'en';
+    $path = '/' . ltrim($path, '/');
+    $separator = strpos($path, '?') === false ? '?' : '&';
+    return 'https://app.clarif.io' . $path . $separator . 'lang=' . $lang;
+}
+
 // Δηλώνουμε συμβατότητα με το HPOS (High-Performance Order Storage) του WooCommerce.
 add_action('before_woocommerce_init', function () {
     if (class_exists('\Automattic\WooCommerce\Utilities\FeaturesUtil')) {
@@ -54,7 +69,7 @@ function clarifio_check_dependencies() {
 }
 
 function clarifio_missing_wc_notice() {
-    echo '<div class="error"><p><strong>Clarif.io Connector:</strong> Για να λειτουργήσει το plugin, απαιτείται η εγκατάσταση και ενεργοποίηση του <strong>WooCommerce</strong>.</p></div>';
+    echo '<div class="error"><p>' . wp_kses_post(__('<strong>Clarif.io Connector:</strong> The plugin requires <strong>WooCommerce</strong> to be installed and activated.', 'clarifio-connector')) . '</p></div>';
 }
 
 // ==========================================
@@ -82,7 +97,7 @@ function clarifio_init_plugin() {
 
 function clarifio_display_expired_notice() {
     if ( get_option( 'clarifio_subscription_expired' ) === 'yes' ) {
-        echo '<div class="notice notice-error"><p><strong>Clarif.io:</strong> Ο συγχρονισμός δεδομένων έχει διακοπεί επειδή η συνδρομή σας έχει λήξει. <a href="https://app.clarif.io/account/billing" target="_blank">Μεταβείτε στο ταμείο</a> για να την ανανεώσετε.</p></div>';
+        echo '<div class="notice notice-error"><p>' . wp_kses_post(sprintf(__('<strong>Clarif.io:</strong> Data sync has stopped because your subscription has expired. <a href="%s" target="_blank">Go to billing</a> to renew it.', 'clarifio-connector'), esc_url(clarifio_app_url('/account/billing')))) . '</p></div>';
     }
 }
 
@@ -111,7 +126,7 @@ function clarifio_settings_html() {
     if (isset($_POST['clarifio_api_key'])) {
         update_option('clarifio_api_key', sanitize_text_field($_POST['clarifio_api_key']));
         update_option('clarifio_default_cost_perc', floatval($_POST['clarifio_default_cost_perc']));
-        echo '<div class="notice notice-success is-dismissible"><p>✅ Οι ρυθμίσεις του Clarif.io αποθηκεύτηκαν με επιτυχία.</p></div>';
+        echo '<div class="notice notice-success is-dismissible"><p>✅ ' . esc_html__('Clarif.io settings were saved successfully.', 'clarifio-connector') . '</p></div>';
     }
 
     $api_key = get_option('clarifio_api_key', '');
@@ -125,8 +140,31 @@ function clarifio_settings_html() {
         <script>
         // Κοινά helpers για τα AJAX μηνύματα: μετατρέπουν ΟΠΟΙΟΔΗΠΟΤΕ σφάλμα (string, object, jqXHR) σε
         // αναγνώσιμο κείμενο -- αλλιώς η σύνθεση με string έδινε "[object Object]".
+        window.clarifioI18n = <?php echo wp_json_encode([
+                'unknownError' => __('Unknown error', 'clarifio-connector'),
+                'success' => __('Success:', 'clarifio-connector'),
+                'error' => __('Error:', 'clarifio-connector'),
+                'requestFailed' => __('Could not reach the server:', 'clarifio-connector'),
+                'syncCatalog' => __('Start catalog sync', 'clarifio-connector'),
+                'syncInProgress' => __('Sync in progress...', 'clarifio-connector'),
+                'preparing' => __('Preparing data...', 'clarifio-connector'),
+                'noOrdersTitle' => __('No orders:', 'clarifio-connector'),
+                'noOrdersMsg' => __('No orders found to sync.', 'clarifio-connector'),
+                'sendingOrders' => __('Sending orders %1$s–%2$s of %3$s...', 'clarifio-connector'),
+                'completed' => __('Completed', 'clarifio-connector'),
+                'ordersSynced' => __('%1$s orders were synced to Clarif.io.', 'clarifio-connector'),
+                'stoppedAfter' => __('Stopped after %1$s of %2$s orders:', 'clarifio-connector')
+            ]); ?>;
+        // Αντικαθιστά %1$s, %2$s... με τα ορίσματα (όπως το sprintf της PHP).
+        window.clarifioFmt = function (s) {
+            var a = arguments;
+            return s.replace(/%(\d+)\$s/g, function (m, i) { return a[i]; });
+        };
+        window.clarifioBtnHtml = function (label, spinning) {
+            return '<span class="dashicons dashicons-update-alt" style="margin-top: 5px;' + (spinning ? ' animation: rotation 2s infinite linear;' : '') + '"></span> ' + jQuery('<div>').text(label).html();
+        };
         window.clarifioErrText = function (e) {
-            if (!e) return 'Άγνωστο σφάλμα';
+            if (!e) return clarifioI18n.unknownError;
             if (typeof e === 'string') return e;
             if (e instanceof Error) return e.message;
             if (e.responseJSON && e.responseJSON.data) return window.clarifioErrText(e.responseJSON.data);
@@ -162,21 +200,21 @@ function clarifio_settings_html() {
                             Workspace
                         </span>
                     </h1>
-                    <p style="margin: 5px 0 0 0; color: #64748b; font-size: 14px;">Η καθημερινή σας οικονομική πυξίδα για το e-commerce.</p>
+                    <p style="margin: 5px 0 0 0; color: #64748b; font-size: 14px;"><?php esc_html_e('Your daily financial compass for e-commerce.', 'clarifio-connector'); ?></p>
                 </div>
                 <div>
-                    <a href="https://app.clarif.io" target="_blank" class="button" style="display: flex; align-items: center; gap: 8px; padding: 8px 16px;">
-                        <span class="dashicons dashicons-external"></span> Άνοιγμα Εφαρμογής
+                    <a href="<?php echo esc_url(clarifio_app_url('/')); ?>" target="_blank" class="button" style="display: flex; align-items: center; gap: 8px; padding: 8px 16px;">
+                        <span class="dashicons dashicons-external"></span> <?php esc_html_e('Open app', 'clarifio-connector'); ?>
                     </a>
                 </div>
             </div>
 
             <h2 class="nav-tab-wrapper">
-                <a href="?page=clarifio-settings&tab=dashboard" class="nav-tab <?php echo $active_tab == 'dashboard' ? 'nav-tab-active' : ''; ?>">📊 Επισκόπηση</a>
-                <a href="?page=clarifio-settings&tab=sync" class="nav-tab <?php echo $active_tab == 'sync' ? 'nav-tab-active' : ''; ?>">📦 Προϊόντα & Κόστη</a>
-                <a href="?page=clarifio-settings&tab=sync_orders" class="nav-tab <?php echo $active_tab == 'sync_orders' ? 'nav-tab-active' : ''; ?>">🔄 Ιστορικό Παραγγελιών</a>
-                <a href="?page=clarifio-settings&tab=settings" class="nav-tab <?php echo $active_tab == 'settings' ? 'nav-tab-active' : ''; ?>">⚙️ Σύνδεση & Ρυθμίσεις</a>
-                <a href="?page=clarifio-settings&tab=debug" class="nav-tab <?php echo $active_tab == 'debug' ? 'nav-tab-active' : ''; ?>">🛠️ Κατάσταση Συστήματος</a>
+                <a href="?page=clarifio-settings&tab=dashboard" class="nav-tab <?php echo $active_tab == 'dashboard' ? 'nav-tab-active' : ''; ?>">📊 <?php esc_html_e('Overview', 'clarifio-connector'); ?></a>
+                <a href="?page=clarifio-settings&tab=sync" class="nav-tab <?php echo $active_tab == 'sync' ? 'nav-tab-active' : ''; ?>">📦 <?php esc_html_e('Products & Costs', 'clarifio-connector'); ?></a>
+                <a href="?page=clarifio-settings&tab=sync_orders" class="nav-tab <?php echo $active_tab == 'sync_orders' ? 'nav-tab-active' : ''; ?>">🔄 <?php esc_html_e('Order History', 'clarifio-connector'); ?></a>
+                <a href="?page=clarifio-settings&tab=settings" class="nav-tab <?php echo $active_tab == 'settings' ? 'nav-tab-active' : ''; ?>">⚙️ <?php esc_html_e('Connection & Settings', 'clarifio-connector'); ?></a>
+                <a href="?page=clarifio-settings&tab=debug" class="nav-tab <?php echo $active_tab == 'debug' ? 'nav-tab-active' : ''; ?>">🛠️ <?php esc_html_e('System Status', 'clarifio-connector'); ?></a>
             </h2>
         <?php endif; ?>
 
@@ -187,23 +225,23 @@ function clarifio_settings_html() {
             if ($active_tab == 'welcome' || empty($api_key)) : ?>
                 <div style="text-align: center; max-width: 650px; margin: 40px auto;">
                     <span class="dashicons dashicons-chart-area" style="font-size: 80px; width: 80px; height: 80px; color: #2563eb;"></span>
-                    <h1 style="font-size: 36px; margin-bottom: 15px; color: #0f172a; font-weight: 700;">Οικονομική διαύγεια για το e-shop σας.</h1>
+                    <h1 style="font-size: 36px; margin-bottom: 15px; color: #0f172a; font-weight: 700;"><?php esc_html_e('Financial clarity for your e-shop.', 'clarifio-connector'); ?></h1>
                     <p style="font-size: 18px; color: #475569; line-height: 1.6;">
-                        Ο τζίρος είναι ματαιοδοξία, το κέρδος είναι λογική. Το Clarif.io συνδέεται στο WooCommerce σας και υπολογίζει σε πραγματικό χρόνο το <strong>Πραγματικό Καθαρό Κέρδος (Net Profit)</strong>, αφαιρώντας αυτόματα τα κόστη αγοράς (COGS), τα μεταφορικά και τις προμήθειες των τραπεζών.
+                        <?php echo wp_kses_post(__('Revenue is vanity, profit is sanity. Clarif.io connects to your WooCommerce store and calculates your <strong>real Net Profit</strong> in real time, automatically subtracting purchase costs (COGS), shipping and payment fees.', 'clarifio-connector')); ?>
                     </p>
                     
                     <div style="background: #f8fafc; border: 1px solid #e2e8f0; padding: 25px; border-radius: 12px; margin: 40px 0;">
-                        <h3 style="margin-top: 0; color: #1e293b; font-size: 20px;">Ξεκινήστε τον δωρεάν μήνα σας</h3>
-                        <p style="color: #64748b; font-size: 15px;">Ανακαλύψτε ποια προϊόντα σας αφήνουν πραγματικό κέρδος και ποια "τρώνε" το budget σας. Χωρίς δέσμευση, χωρίς πιστωτική κάρτα.</p>
-                        <a href="https://app.clarif.io/register" target="_blank" class="button button-primary button-hero" style="background: #2563eb; border-color: #1d4ed8; padding: 10px 30px; font-weight: 600;">Δημιουργία Λογαριασμού</a>
+                        <h3 style="margin-top: 0; color: #1e293b; font-size: 20px;"><?php esc_html_e('Start your free trial', 'clarifio-connector'); ?></h3>
+                        <p style="color: #64748b; font-size: 15px;"><?php esc_html_e('Find out which products leave you real profit and which ones "eat" your budget. No commitment, no credit card.', 'clarifio-connector'); ?></p>
+                        <a href="<?php echo esc_url(clarifio_app_url('/register')); ?>" target="_blank" class="button button-primary button-hero" style="background: #2563eb; border-color: #1d4ed8; padding: 10px 30px; font-weight: 600;"><?php esc_html_e('Create account', 'clarifio-connector'); ?></a>
                     </div>
 
                     <form method="post" action="?page=clarifio-settings&tab=settings" style="background: #fff; border: 1px solid #e2e8f0; padding: 30px; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); text-align: left;">
-                        <h3 style="margin-top: 0; color: #0f172a;">Σύνδεση υπάρχοντος λογαριασμού</h3>
-                        <p style="color: #64748b; font-size: 14px;">Εάν έχετε ήδη εγγραφεί, επικολλήστε το μοναδικό API Key του καταστήματός σας παρακάτω. Θα το βρείτε στην επιλογή "Καταστήματα" στο Clarif.io App.</p>
-                        <input type="password" name="clarifio_api_key" placeholder="π.χ. cl_live_8f7d6a5..." style="width: 100%; padding: 12px; margin: 15px 0; font-size: 16px; border-radius: 6px; border: 1px solid #cbd5e1;" required>
+                        <h3 style="margin-top: 0; color: #0f172a;"><?php esc_html_e('Connect an existing account', 'clarifio-connector'); ?></h3>
+                        <p style="color: #64748b; font-size: 14px;"><?php esc_html_e('If you have already registered, paste your store\'s unique API Key below. You will find it under "Stores" in the Clarif.io app.', 'clarifio-connector'); ?></p>
+                        <input type="password" name="clarifio_api_key" placeholder="<?php echo esc_attr__('e.g. cl_live_8f7d6a5...', 'clarifio-connector'); ?>" style="width: 100%; padding: 12px; margin: 15px 0; font-size: 16px; border-radius: 6px; border: 1px solid #cbd5e1;" required>
                         <input type="hidden" name="clarifio_default_cost_perc" value="60"> 
-                        <?php submit_button('Ασφαλής Σύνδεση', 'primary', 'submit', false, ['style' => 'width: 100%; font-size: 16px; padding: 12px; height: auto; border-radius: 6px; background: #0f172a; border-color: #0f172a;']); ?>
+                        <?php submit_button(__('Connect securely', 'clarifio-connector'), 'primary', 'submit', false, ['style' => 'width: 100%; font-size: 16px; padding: 12px; height: auto; border-radius: 6px; background: #0f172a; border-color: #0f172a;']); ?>
                     </form>
                 </div>
             
@@ -225,7 +263,7 @@ function clarifio_settings_html() {
                 $is_expired = get_option('clarifio_subscription_expired') === 'yes';
 
                 if (is_wp_error($status_response)) {
-                    echo '<div class="notice notice-error"><p><strong>Σφάλμα Δικτύου:</strong> Αδυναμία επικοινωνίας με τους διακομιστές του Clarif.io. Παρακαλώ ελέγξτε τη σύνδεσή σας.</p></div>';
+                    echo '<div class="notice notice-error"><p>' . wp_kses_post(__('<strong>Network error:</strong> Could not reach the Clarif.io servers. Please check your connection.', 'clarifio-connector')) . '</p></div>';
                 } else {
                     $http_code = wp_remote_retrieve_response_code($status_response);
                     
@@ -237,9 +275,9 @@ function clarifio_settings_html() {
                             ?>
                             <div style="border: 1px solid #ef4444; background: #fef2f2; padding: 30px; border-radius: 8px; text-align: center;">
                                 <span class="dashicons dashicons-warning" style="color: #ef4444; font-size: 50px; width: 50px; height: 50px;"></span>
-                                <h3 style="color: #b91c1c; font-size: 20px; margin-top: 15px;">Η συνδρομή σας έληξε</h3>
-                                <p style="font-size: 15px; color: #7f1d1d;">Ο συγχρονισμός των παραγγελιών και η προβολή στατιστικών έχουν διακοπεί. Παρακαλώ ανανεώστε το πακέτο σας για να συνεχίσετε να παρακολουθείτε τα κέρδη σας.</p>
-                                <a href="https://app.clarif.io/account/billing" target="_blank" class="button button-primary button-large" style="background: #ef4444; border-color: #dc2626; margin-top: 15px;">Ανανέωση Συνδρομής</a>
+                                <h3 style="color: #b91c1c; font-size: 20px; margin-top: 15px;"><?php esc_html_e('Your subscription has expired', 'clarifio-connector'); ?></h3>
+                                <p style="font-size: 15px; color: #7f1d1d;"><?php esc_html_e('Order sync and statistics have stopped. Please renew your plan to keep tracking your profits.', 'clarifio-connector'); ?></p>
+                                <a href="<?php echo esc_url(clarifio_app_url('/account/billing')); ?>" target="_blank" class="button button-primary button-large" style="background: #ef4444; border-color: #dc2626; margin-top: 15px;"><?php esc_html_e('Renew subscription', 'clarifio-connector'); ?></a>
                             </div>
                             <?php
                         } else {
@@ -247,8 +285,8 @@ function clarifio_settings_html() {
                             <div style="border: 1px solid #10b981; background: #ecfdf5; padding: 20px; border-radius: 8px; margin-bottom: 30px; display: flex; align-items: center; gap: 15px;">
                                 <span class="dashicons dashicons-shield" style="color: #10b981; font-size: 40px; width: 40px; height: 40px;"></span>
                                 <div>
-                                    <h3 style="margin: 0; color: #065f46; font-size: 18px;">Ασφαλής Σύνδεση Ενεργή</h3>
-                                    <p style="margin: 5px 0 0 0; font-size: 14px; color: #047857;">Το e-shop <strong><?php echo esc_html($status_body->storeName); ?></strong> συγχρονίζεται σε πραγματικό χρόνο.</p>
+                                    <h3 style="margin: 0; color: #065f46; font-size: 18px;"><?php esc_html_e('Secure connection active', 'clarifio-connector'); ?></h3>
+                                    <p style="margin: 5px 0 0 0; font-size: 14px; color: #047857;"><?php echo wp_kses_post(sprintf(__('The e-shop <strong>%s</strong> is syncing in real time.', 'clarifio-connector'), esc_html($status_body->storeName))); ?></p>
                                 </div>
                             </div>
                             
@@ -257,79 +295,79 @@ function clarifio_settings_html() {
                                 $stats = json_decode(wp_remote_retrieve_body($stats_response));
                                 ?>
                                 <div style="display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 1px solid #e2e8f0; padding-bottom: 10px; margin-bottom: 20px;">
-                                    <h2 style="margin: 0; color: #0f172a;">Σύνοψη Τρέχοντος Μήνα</h2>
-                                    <span style="color: #64748b; font-size: 13px;">Ανανέωση σε πραγματικό χρόνο</span>
+                                    <h2 style="margin: 0; color: #0f172a;"><?php esc_html_e('This month\'s summary', 'clarifio-connector'); ?></h2>
+                                    <span style="color: #64748b; font-size: 13px;"><?php esc_html_e('Updated in real time', 'clarifio-connector'); ?></span>
                                 </div>
 
                                 <div style="display: flex; gap: 20px; flex-wrap: wrap;">
                                     <div style="flex: 1; min-width: 200px; background: #fff; border: 1px solid #e2e8f0; padding: 20px; border-radius: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.02);">
-                                        <span style="color: #64748b; font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Μικτος Τζιρος</span>
-                                        <div style="font-size: 28px; font-weight: 700; color: #1e293b; margin-top: 8px;">€<?php echo number_format($stats->totalRevenue, 2, ',', '.'); ?></div>
-                                        <p style="margin: 5px 0 0 0; font-size: 12px; color: #94a3b8;">Συνολικά έσοδα προ κρατήσεων</p>
+                                        <span style="color: #64748b; font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;"><?php esc_html_e('Gross revenue', 'clarifio-connector'); ?></span>
+                                        <div style="font-size: 28px; font-weight: 700; color: #1e293b; margin-top: 8px;">€<?php echo number_format_i18n($stats->totalRevenue, 2); ?></div>
+                                        <p style="margin: 5px 0 0 0; font-size: 12px; color: #94a3b8;"><?php esc_html_e('Total revenue before deductions', 'clarifio-connector'); ?></p>
                                     </div>
 
                                     <div style="flex: 1; min-width: 200px; background: #fff; border: 1px solid #10b981; padding: 20px; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(16, 185, 129, 0.1);">
-                                        <span style="color: #047857; font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Καθαρο Κερδος</span>
-                                        <div style="font-size: 28px; font-weight: 700; color: #10b981; margin-top: 8px;">€<?php echo number_format($stats->totalNetProfit, 2, ',', '.'); ?></div>
-                                        <p style="margin: 5px 0 0 0; font-size: 12px; color: #059669;">Τα χρήματα που μένουν στην επιχείρηση</p>
+                                        <span style="color: #047857; font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;"><?php esc_html_e('Net profit', 'clarifio-connector'); ?></span>
+                                        <div style="font-size: 28px; font-weight: 700; color: #10b981; margin-top: 8px;">€<?php echo number_format_i18n($stats->totalNetProfit, 2); ?></div>
+                                        <p style="margin: 5px 0 0 0; font-size: 12px; color: #059669;"><?php esc_html_e('The money that stays in the business', 'clarifio-connector'); ?></p>
                                     </div>
 
                                     <div style="flex: 1; min-width: 200px; background: #fff; border: 1px solid #e2e8f0; padding: 20px; border-radius: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.02);">
-                                        <span style="color: #64748b; font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Μεσο Περιθωριο (Margin)</span>
-                                        <div style="font-size: 28px; font-weight: 700; color: #3b82f6; margin-top: 8px;"><?php echo number_format($stats->averageMargin, 1, ',', '.'); ?>%</div>
-                                        <p style="margin: 5px 0 0 0; font-size: 12px; color: #94a3b8;">Υγεία κερδοφορίας καταστήματος</p>
+                                        <span style="color: #64748b; font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;"><?php esc_html_e('Average margin', 'clarifio-connector'); ?></span>
+                                        <div style="font-size: 28px; font-weight: 700; color: #3b82f6; margin-top: 8px;"><?php echo number_format_i18n($stats->averageMargin, 1); ?>%</div>
+                                        <p style="margin: 5px 0 0 0; font-size: 12px; color: #94a3b8;"><?php esc_html_e('Store profitability health', 'clarifio-connector'); ?></p>
                                     </div>
                                 </div>
 
                                 <p style="margin-top: 30px; font-size: 15px; color: #475569;">
-                                    Για βαθύτερη ανάλυση, LTV πελατών, και αναφορές ανά προϊόν, μεταβείτε στην πλήρη εφαρμογή.
+                                    <?php esc_html_e('For deeper analysis, customer LTV and per-product reports, go to the full app.', 'clarifio-connector'); ?>
                                 </p>
-                                <a href="https://app.clarif.io" target="_blank" class="button button-primary button-large" style="background: #0f172a; border-color: #0f172a; border-radius: 6px;">
-                                    Μετάβαση στο Web App &rarr;
+                                <a href="<?php echo esc_url(clarifio_app_url('/')); ?>" target="_blank" class="button button-primary button-large" style="background: #0f172a; border-color: #0f172a; border-radius: 6px;">
+                                    <?php echo wp_kses_post(__('Go to the web app &rarr;', 'clarifio-connector')); ?>
                                 </a>
                                 <?php
                             }
                         }
                     } else {
-                        echo '<div class="notice notice-error"><p>⚠️ <strong>Σφάλμα Αυθεντικοποίησης:</strong> Το API Key φαίνεται να είναι άκυρο ή έχει ανακληθεί. Ελέγξτε τις ρυθμίσεις σας.</p></div>';
+                        echo '<div class="notice notice-error"><p>⚠️ ' . wp_kses_post(__('<strong>Authentication error:</strong> The API Key appears to be invalid or has been revoked. Please check your settings.', 'clarifio-connector')) . '</p></div>';
                     }
                 }
             
             // --- TAB 2: ΡΥΘΜΙΣΕΙΣ ---
             elseif ($active_tab == 'settings') : ?>
                 <div style="max-width: 800px;">
-                    <h2 style="font-size: 20px; color: #0f172a; border-bottom: 1px solid #e2e8f0; padding-bottom: 10px;">Ρυθμίσεις Σύνδεσης & Αλγορίθμου</h2>
-                    <p style="color: #64748b; font-size: 14px; margin-bottom: 25px;">Διαχειριστείτε την επικοινωνία του καταστήματός σας με την πλατφόρμα ανάλυσης δεδομένων.</p>
+                    <h2 style="font-size: 20px; color: #0f172a; border-bottom: 1px solid #e2e8f0; padding-bottom: 10px;"><?php esc_html_e('Connection & Algorithm Settings', 'clarifio-connector'); ?></h2>
+                    <p style="color: #64748b; font-size: 14px; margin-bottom: 25px;"><?php esc_html_e('Manage how your store communicates with the data analytics platform.', 'clarifio-connector'); ?></p>
 
                     <form method="post" action="?page=clarifio-settings&tab=settings">
                         <table class="form-table">
                             <tr>
                                 <th scope="row">
-                                    <label for="clarifio_api_key" style="font-weight: 600;">API Key Καταστήματος</label>
+                                    <label for="clarifio_api_key" style="font-weight: 600;"><?php esc_html_e('Store API Key', 'clarifio-connector'); ?></label>
                                 </th>
                                 <td>
                                     <input type="password" id="clarifio_api_key" name="clarifio_api_key" value="<?php echo esc_attr($api_key); ?>" class="regular-text" style="border-radius: 4px;">
-                                    <p class="description">Το μυστικό κλειδί που εξασφαλίζει την κρυπτογραφημένη μεταφορά των δεδομένων σας.</p>
+                                    <p class="description"><?php esc_html_e('The secret key that secures the encrypted transfer of your data.', 'clarifio-connector'); ?></p>
                                 </td>
                             </tr>
                             <tr>
                                 <th scope="row">
-                                    <label for="clarifio_default_cost_perc" style="font-weight: 600;">Προεπιλεγμένο Κόστος Αγοράς (COGS)</label>
+                                    <label for="clarifio_default_cost_perc" style="font-weight: 600;"><?php esc_html_e('Default purchase cost (COGS)', 'clarifio-connector'); ?></label>
                                 </th>
                                 <td>
                                     <div style="display: flex; align-items: center; gap: 10px;">
                                         <input type="number" id="clarifio_default_cost_perc" name="clarifio_default_cost_perc" value="<?php echo esc_attr($default_perc); ?>" step="0.1" min="0" max="100" style="width: 80px; border-radius: 4px;"> 
-                                        <span style="font-weight: bold; color: #475569;">% της λιανικής τιμής</span>
+                                        <span style="font-weight: bold; color: #475569;"><?php esc_html_e('% of the retail price', 'clarifio-connector'); ?></span>
                                     </div>
                                     <p class="description" style="max-width: 500px;">
-                                        Εάν ένα προϊόν δεν έχει ρητά συμπληρωμένο πεδίο "Κόστος", ο αλγόριθμος του Clarif.io θα χρησιμοποιήσει αυτό το ποσοστό ως δίχτυ ασφαλείας. <br>
-                                        <em>Παράδειγμα: Αν οριστεί στο 60% και πουλήσετε κάτι 100€, το σύστημα θα θεωρήσει ότι το αγοράσατε 60€.</em>
+                                        <?php esc_html_e('If a product has no explicitly filled "Cost" field, the Clarif.io algorithm will use this percentage as a safety net.', 'clarifio-connector'); ?> <br>
+                                        <em><?php esc_html_e('Example: if set to 60% and you sell something for €100, the system will assume you bought it for €60.', 'clarifio-connector'); ?></em>
                                     </p>
                                 </td>
                             </tr>
                         </table>
                         <p class="submit">
-                            <?php submit_button('Αποθήκευση Αλλαγών', 'primary', 'submit', false, ['style' => 'background: #2563eb; border-color: #1d4ed8; border-radius: 6px;']); ?>
+                            <?php submit_button(__('Save changes', 'clarifio-connector'), 'primary', 'submit', false, ['style' => 'background: #2563eb; border-color: #1d4ed8; border-radius: 6px;']); ?>
                         </p>
                     </form>
                 </div>
@@ -338,26 +376,26 @@ function clarifio_settings_html() {
             // --- TAB 3: ΣΥΓΧΡΟΝΙΣΜΟΣ ΠΡΟΙΟΝΤΩΝ ---
             elseif ($active_tab == 'sync') : ?>
                 <div style="max-width: 800px;">
-                    <h2 style="font-size: 20px; color: #0f172a; border-bottom: 1px solid #e2e8f0; padding-bottom: 10px;">Βάση Δεδομένων Προϊόντων</h2>
+                    <h2 style="font-size: 20px; color: #0f172a; border-bottom: 1px solid #e2e8f0; padding-bottom: 10px;"><?php esc_html_e('Product Database', 'clarifio-connector'); ?></h2>
                     <p style="color: #64748b; font-size: 15px; margin-bottom: 25px; line-height: 1.6;">
-                        Ο θεμέλιος λίθος των σωστών οικονομικών υπολογισμών. Η λειτουργία αυτή συλλέγει όλα τα ενεργά σας προϊόντα, τα SKUs και τα κόστη τους, δημιουργώντας το ενιαίο ευρετήριο (Catalog) στο Clarif.io.
+                        <?php esc_html_e('The foundation of accurate financial calculations. This function collects all your active products, SKUs and costs, building the unified catalog in Clarif.io.', 'clarifio-connector'); ?>
                     </p>
 
                     <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-left: 4px solid #f59e0b; padding: 20px; border-radius: 6px; margin-bottom: 25px;">
-                        <h4 style="margin: 0 0 10px 0; color: #b45309;">Πότε να χρησιμοποιήσετε αυτή τη λειτουργία;</h4>
+                        <h4 style="margin: 0 0 10px 0; color: #b45309;"><?php esc_html_e('When should you use this function?', 'clarifio-connector'); ?></h4>
                         <ul style="margin: 0; padding-left: 20px; color: #475569;">
-                            <li>Κατά την <strong>αρχική εγκατάσταση</strong> του plugin.</li>
-                            <li>Αν κάνατε <strong>μαζική αλλαγή τιμών αγοράς (κοστών)</strong> στο WooCommerce (π.χ. μέσω κάποιου αρχείου CSV ή ERP).</li>
+                            <li><?php echo wp_kses_post(__('During the plugin\'s <strong>initial installation</strong>.', 'clarifio-connector')); ?></li>
+                            <li><?php echo wp_kses_post(__('If you made a <strong>bulk change of purchase prices (costs)</strong> in WooCommerce (e.g. via a CSV file or an ERP).', 'clarifio-connector')); ?></li>
                         </ul>
                         <p style="margin: 10px 0 0 0; font-size: 13px; color: #64748b;">
-                            *Σημείωση: Δεν χρειάζεται να το πατάτε καθημερινά. Όταν επεξεργάζεστε/δημιουργείτε ένα προϊόν, το plugin ενημερώνει αυτόματα το Clarif.io στο παρασκήνιο.
+                            <?php esc_html_e('*Note: You do not need to press this every day. When you edit or create a product, the plugin updates Clarif.io automatically in the background.', 'clarifio-connector'); ?>
                         </p>
                     </div>
 
                     <script> var clarifio_security_nonce = '<?php echo wp_create_nonce("clarifio_ajax_nonce"); ?>'; </script>
                     
                     <button type="button" id="clarifio-sync-btn" class="button button-primary button-large" style="background: #0f172a; border-color: #0f172a; border-radius: 6px; padding: 5px 20px;">
-                        <span class="dashicons dashicons-update-alt" style="margin-top: 5px;"></span> Έναρξη Συγχρονισμού Καταλόγου
+                        <span class="dashicons dashicons-update-alt" style="margin-top: 5px;"></span> <?php esc_html_e('Start catalog sync', 'clarifio-connector'); ?>
                     </button>
                     <div id="clarifio-sync-result" style="margin-top: 20px;"></div>
 
@@ -367,19 +405,19 @@ function clarifio_settings_html() {
                         $('#clarifio-sync-btn').on('click', function(e) {
                             e.preventDefault();
                             var $btn = $(this);
-                            $btn.prop('disabled', true).html('<span class="dashicons dashicons-update-alt" style="margin-top: 5px; animation: rotation 2s infinite linear;"></span> Συγχρονισμός σε εξέλιξη...');
+                            $btn.prop('disabled', true).html(clarifioBtnHtml(clarifioI18n.syncInProgress, true));
                             $('#clarifio-sync-result').html('');
 
                             $.post(ajaxurl, { action: 'clarifio_sync_products', security: clarifio_security_nonce }, function(response) {
-                                $btn.prop('disabled', false).html('<span class="dashicons dashicons-update-alt" style="margin-top: 5px;"></span> Έναρξη Συγχρονισμού Καταλόγου');
+                                $btn.prop('disabled', false).html(clarifioBtnHtml(clarifioI18n.syncCatalog, false));
                                 if(response.success) {
-                                    clarifioShow($('#clarifio-sync-result'), 'success', '✅ Επιτυχία:', clarifioErrText(response.data.message || response.data));
+                                    clarifioShow($('#clarifio-sync-result'), 'success', '✅ ' + clarifioI18n.success, clarifioErrText(response.data.message || response.data));
                                 } else {
-                                    clarifioShow($('#clarifio-sync-result'), 'error', '❌ Σφάλμα:', clarifioErrText(response.data));
+                                    clarifioShow($('#clarifio-sync-result'), 'error', '❌ ' + clarifioI18n.error, clarifioErrText(response.data));
                                 }
                             }).fail(function(xhr) {
-                                $btn.prop('disabled', false).html('<span class="dashicons dashicons-update-alt" style="margin-top: 5px;"></span> Έναρξη Συγχρονισμού Καταλόγου');
-                                clarifioShow($('#clarifio-sync-result'), 'error', '❌ Αποτυχία επικοινωνίας με τον server:', clarifioErrText(xhr));
+                                $btn.prop('disabled', false).html(clarifioBtnHtml(clarifioI18n.syncCatalog, false));
+                                clarifioShow($('#clarifio-sync-result'), 'error', '❌ ' + clarifioI18n.requestFailed, clarifioErrText(xhr));
                             });
                         });
                     });
@@ -391,26 +429,26 @@ function clarifio_settings_html() {
             // --- TAB 4: ΣΥΓΧΡΟΝΙΣΜΟΣ ΠΑΡΑΓΓΕΛΙΩΝ ---
             elseif ($active_tab == 'sync_orders') : ?>
                 <div style="max-width: 800px;">
-                    <h2 style="font-size: 20px; color: #0f172a; border-bottom: 1px solid #e2e8f0; padding-bottom: 10px;">Ιστορικό Ανάλυσης Παραγγελιών</h2>
+                    <h2 style="font-size: 20px; color: #0f172a; border-bottom: 1px solid #e2e8f0; padding-bottom: 10px;"><?php esc_html_e('Order History Analysis', 'clarifio-connector'); ?></h2>
                     <p style="color: #64748b; font-size: 15px; margin-bottom: 25px; line-height: 1.6;">
-                        Ανακαλύψτε την κρυμμένη αξία των παλαιών σας δεδομένων. Ο μαζικός συγχρονισμός αποστέλλει το ιστορικό πωλήσεών σας στο Clarif.io, επιτρέποντας στον αλγόριθμο να κατασκευάσει τα ιστορικά γραφήματα και να υπολογίσει την <strong>Αξία Ζωής Πελάτη (LTV)</strong>.
+                        <?php echo wp_kses_post(__('Discover the hidden value of your older data. Bulk sync sends your sales history to Clarif.io, allowing the algorithm to build the historical charts and calculate <strong>Customer Lifetime Value (LTV)</strong>.', 'clarifio-connector')); ?>
                     </p>
                     
                     <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-left: 4px solid #3b82f6; padding: 20px; border-radius: 6px; margin-bottom: 25px;">
                         <p style="margin: 0; color: #475569; font-size: 14px;">
-                            <strong>Πληροφορία Υποδομής:</strong> Η διαδικασία έχει σχεδιαστεί ώστε να είναι "αόρατη" για τον server σας. Οι παραγγελίες ομαδοποιούνται και αποστέλλονται τμηματικά (ανά 50), εξασφαλίζοντας μηδενική πτώση στην ταχύτητα του e-shop σας κατά τη διάρκεια του συγχρονισμού.
+                            <?php echo wp_kses_post(__('<strong>Infrastructure note:</strong> The process is designed to be "invisible" to your server. Orders are grouped and sent in batches (of 50), ensuring no slowdown of your e-shop during the sync.', 'clarifio-connector')); ?>
                         </p>
                     </div>
 
                     <script> var clarifio_security_nonce = '<?php echo wp_create_nonce("clarifio_ajax_nonce"); ?>'; </script>
 
                     <button type="button" id="clarifio-sync-orders-btn" class="button button-primary button-large" style="background: #2563eb; border-color: #1d4ed8; border-radius: 6px; padding: 5px 25px;">
-                        ▶ Έναρξη Ανάλυσης Ιστορικού
+                        ▶ <?php esc_html_e('Start history analysis', 'clarifio-connector'); ?>
                     </button>
                     
                     <div id="clarifio-progress-wrapper" style="display: none; margin-top: 25px; background: #fff; padding: 20px; border: 1px solid #e2e8f0; border-radius: 8px; box-shadow: 0 1px 2px rgba(0,0,0,0.05);">
                         <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
-                            <span id="clarifio-sync-status-text" style="font-weight: 600; color: #1e293b;">Προετοιμασία δεδομένων...</span>
+                            <span id="clarifio-sync-status-text" style="font-weight: 600; color: #1e293b;"><?php esc_html_e('Preparing data...', 'clarifio-connector'); ?></span>
                             <span id="clarifio-sync-percent" style="font-weight: bold; color: #2563eb;">0%</span>
                         </div>
                         <div style="width: 100%; background-color: #f1f5f9; border-radius: 999px; overflow: hidden; height: 12px;">
@@ -439,7 +477,7 @@ function clarifio_settings_html() {
                             $btn.prop('disabled', true);
                             $result.empty();
                             $wrapper.show();
-                            setProgress(0, 0, 'Προετοιμασία δεδομένων...');
+                            setProgress(0, 0, clarifioI18n.preparing);
 
                             var done = 0;
                             var total = 0;
@@ -451,23 +489,23 @@ function clarifio_settings_html() {
                                 total = ids.length;
                                 if (total === 0) {
                                     $wrapper.hide();
-                                    clarifioShow($result, 'warning', 'ℹ️ Καμία παραγγελία:', 'Δεν βρέθηκαν παραγγελίες προς συγχρονισμό.');
+                                    clarifioShow($result, 'warning', 'ℹ️ ' + clarifioI18n.noOrdersTitle, clarifioI18n.noOrdersMsg);
                                     return;
                                 }
 
                                 for (var i = 0; i < total; i += CHUNK_SIZE) {
                                     var chunk = ids.slice(i, i + CHUNK_SIZE);
-                                    setProgress(done, total, 'Αποστολή παραγγελιών ' + (i + 1) + '–' + (i + chunk.length) + ' από ' + total + '...');
+                                    setProgress(done, total, clarifioFmt(clarifioI18n.sendingOrders, i + 1, i + chunk.length, total));
                                     var chunkResponse = await $.post(ajaxurl, { action: 'clarifio_process_order_chunk', security: clarifio_security_nonce, order_ids: chunk });
                                     if (!chunkResponse.success) throw chunkResponse.data;
                                     done += chunk.length;
                                 }
 
-                                setProgress(total, total, 'Ολοκληρώθηκε');
-                                clarifioShow($result, 'success', '✅ Επιτυχία:', 'Συγχρονίστηκαν ' + done + ' παραγγελίες στο Clarif.io.');
+                                setProgress(total, total, clarifioI18n.completed);
+                                clarifioShow($result, 'success', '✅ ' + clarifioI18n.success, clarifioFmt(clarifioI18n.ordersSynced, done));
                             } catch (err) {
                                 // Σταματάμε στο πρώτο σφάλμα (π.χ. 402 όριο/λήξη συνδρομής) για να μη στέλνουμε άσκοπα τα υπόλοιπα τμήματα.
-                                clarifioShow($result, 'error', '❌ Διακοπή μετά από ' + done + ' από ' + total + ' παραγγελίες:', clarifioErrText(err));
+                                clarifioShow($result, 'error', '❌ ' + clarifioFmt(clarifioI18n.stoppedAfter, done, total), clarifioErrText(err));
                             } finally {
                                 $btn.prop('disabled', false);
                             }
@@ -481,32 +519,32 @@ function clarifio_settings_html() {
             elseif ($active_tab == 'debug') : ?>
                 <div style="max-width: 100%;">
                     <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #e2e8f0; padding-bottom: 10px; margin-bottom: 20px;">
-                        <h2 style="margin: 0; font-size: 20px; color: #0f172a;">Αρχείο Καταγραφής Συμβάντων (Logs)</h2>
-                        <span style="color: #64748b; font-size: 13px;">Διατηρούνται οι τελευταίες 50 εγγραφές</span>
+                        <h2 style="margin: 0; font-size: 20px; color: #0f172a;"><?php esc_html_e('Event Log', 'clarifio-connector'); ?></h2>
+                        <span style="color: #64748b; font-size: 13px;"><?php esc_html_e('The last 50 entries are kept', 'clarifio-connector'); ?></span>
                     </div>
-                    <p style="color: #64748b; font-size: 14px;">Χρησιμοποιήστε αυτή την οθόνη για έλεγχο ορθής λειτουργίας (troubleshooting) ή στείλτε ένα στιγμιότυπο στην υποστήριξη του Clarif.io σε περίπτωση προβλήματος.</p>
+                    <p style="color: #64748b; font-size: 14px;"><?php esc_html_e('Use this screen to troubleshoot, or send a screenshot to Clarif.io support if you run into a problem.', 'clarifio-connector'); ?></p>
                     
                     <table class="wp-list-table widefat fixed striped" style="margin-top: 20px; border-radius: 8px; overflow: hidden; border: 1px solid #e2e8f0;">
                         <thead style="background: #f8fafc;">
                             <tr>
                                 <th style="width: 160px; font-weight: 600; color: #1e293b;">Timestamp</th>
-                                <th style="font-weight: 600; color: #1e293b;">Συμβάν (Event)</th>
-                                <th style="width: 120px; font-weight: 600; color: #1e293b;">Κατάσταση</th>
-                                <th style="width: 38%; font-weight: 600; color: #1e293b;">Λεπτομέρειες (αίτημα / απάντηση)</th>
+                                <th style="font-weight: 600; color: #1e293b;"><?php esc_html_e('Event', 'clarifio-connector'); ?></th>
+                                <th style="width: 120px; font-weight: 600; color: #1e293b;"><?php esc_html_e('Status', 'clarifio-connector'); ?></th>
+                                <th style="width: 38%; font-weight: 600; color: #1e293b;"><?php esc_html_e('Details (request / response)', 'clarifio-connector'); ?></th>
                             </tr>
                         </thead>
                         <tbody>
                             <?php 
                             $logs = array_reverse(get_option('clarifio_debug_logs', []));
                             if (empty($logs)) {
-                                echo '<tr><td colspan="4" style="text-align: center; padding: 30px; color: #64748b;">Δεν έχουν καταγραφεί ακόμη ενέργειες επικοινωνίας.</td></tr>';
+                                echo '<tr><td colspan="4" style="text-align: center; padding: 30px; color: #64748b;">' . esc_html__('No communication events have been logged yet.', 'clarifio-connector') . '</td></tr>';
                             } else {
                                 foreach ($logs as $log) : 
                                     $code_num = is_numeric($log['code']) ? (int) $log['code'] : 0;
                                     $is_success = ($log['code'] === 'Async' || ($code_num >= 200 && $code_num < 300));
                                     $status_color = $is_success ? '#10b981' : '#ef4444';
                                     $status_bg = $is_success ? '#ecfdf5' : '#fef2f2';
-                                    $status_label = ($log['code'] === 'Async' || $code_num > 0) ? $log['code'] : 'Χωρίς απάντηση';
+                                    $status_label = ($log['code'] === 'Async' || $code_num > 0) ? $log['code'] : __('No response', 'clarifio-connector');
                                 ?>
                                     <tr>
                                         <td style="color: #475569; font-size: 13px;"><?php echo esc_html($log['time']); ?></td>
@@ -518,11 +556,11 @@ function clarifio_settings_html() {
                                         </td>
                                         <td>
                                             <details>
-                                                <summary style="cursor: pointer; color: #2563eb; font-size: 12px;">Προβολή</summary>
-                                                <p style="margin: 10px 0 4px 0; font-weight: 600; font-size: 12px;">Αίτημα</p>
+                                                <summary style="cursor: pointer; color: #2563eb; font-size: 12px;"><?php esc_html_e('View', 'clarifio-connector'); ?></summary>
+                                                <p style="margin: 10px 0 4px 0; font-weight: 600; font-size: 12px;"><?php esc_html_e('Request', 'clarifio-connector'); ?></p>
                                                 <pre style="max-height: 220px; overflow: auto; white-space: pre-wrap; word-break: break-all; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 8px; font-size: 11px;"><?php echo esc_html(clarifio_pretty_json($log['payload'])); ?></pre>
-                                                <p style="margin: 10px 0 4px 0; font-weight: 600; font-size: 12px;">Απάντηση</p>
-                                                <pre style="max-height: 220px; overflow: auto; white-space: pre-wrap; word-break: break-all; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 8px; font-size: 11px;"><?php echo esc_html(isset($log['response']) && $log['response'] !== '' ? clarifio_pretty_json($log['response']) : '(καμία απάντηση)'); ?></pre>
+                                                <p style="margin: 10px 0 4px 0; font-weight: 600; font-size: 12px;"><?php esc_html_e('Response', 'clarifio-connector'); ?></p>
+                                                <pre style="max-height: 220px; overflow: auto; white-space: pre-wrap; word-break: break-all; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 8px; font-size: 11px;"><?php echo esc_html(isset($log['response']) && $log['response'] !== '' ? clarifio_pretty_json($log['response']) : __('(no response)', 'clarifio-connector')); ?></pre>
                                             </details>
                                         </td>
                                     </tr>
@@ -566,6 +604,13 @@ function clarifio_api_post($path, $payload, $timeout = 15) {
 function clarifio_api_error_message($result) {
     $decoded = json_decode($result['body'], true);
     if (is_array($decoded)) {
+        // Συμβόλαιο API: { code, message, params }. Ο κωδικός μεταφράζεται στη γλώσσα του admin,
+        // το message (αγγλικό) μένει ως fallback για κωδικούς που δεν γνωρίζει αυτή η έκδοση.
+        if (!empty($decoded['code']) && is_string($decoded['code'])) {
+            $params = isset($decoded['params']) && is_array($decoded['params']) ? $decoded['params'] : [];
+            $translated = clarifio_translate_api_code($decoded['code'], $params);
+            if ($translated !== null) return $translated;
+        }
         foreach (['message', 'Message', 'title'] as $key) {
             if (!empty($decoded[$key]) && is_string($decoded[$key])) return $decoded[$key];
         }
@@ -574,7 +619,24 @@ function clarifio_api_error_message($result) {
     $body = trim((string) $result['body']);
     if ($body !== '') return mb_substr($body, 0, 300);
 
-    return $result['code'] ? 'HTTP ' . $result['code'] : 'Αδυναμία επικοινωνίας με το Clarif.io';
+    return $result['code'] ? 'HTTP ' . $result['code'] : __('Could not reach Clarif.io', 'clarifio-connector');
+}
+
+// Κωδικός σφάλματος του API -> μεταφρασμένο μήνυμα (null αν ο κωδικός δεν είναι γνωστός).
+function clarifio_translate_api_code($code, $params = []) {
+    switch ($code) {
+        case 'ORIGIN_MISMATCH': return __('Origin mismatch: this API key does not belong to this domain.', 'clarifio-connector');
+        case 'SUBSCRIPTION_EXPIRED': return __('Your subscription has expired. Please upgrade your plan.', 'clarifio-connector');
+        case 'TRIAL_EXPIRED': return __('Your 14-day trial has ended.', 'clarifio-connector');
+        case 'TRIAL_ORDER_LIMIT_REACHED': return __('Your trial limit (500 orders) has been reached.', 'clarifio-connector');
+        case 'TRIAL_ORDER_LIMIT_WOULD_BE_EXCEEDED': return __('Your trial limit would be exceeded. Please upgrade.', 'clarifio-connector');
+        case 'MONTHLY_ORDER_LIMIT_REACHED': return __('You have reached your monthly order limit.', 'clarifio-connector');
+        case 'STORE_NOT_FOUND': return __('Store not found.', 'clarifio-connector');
+        case 'UNEXPECTED_ERROR': return __('An unexpected error occurred. Please try again.', 'clarifio-connector');
+        case 'PRODUCT_LIMIT_REACHED': return sprintf(__('You have reached the limit of %d products. Please upgrade your plan.', 'clarifio-connector'), (int) ($params['limit'] ?? 0));
+        case 'PRODUCT_SYNC_LIMIT_EXCEEDED': return sprintf(__('Sync failed. You exceed the limit of %d products.', 'clarifio-connector'), (int) ($params['limit'] ?? 0));
+    }
+    return null;
 }
 
 function clarifio_pretty_json($text) {
@@ -659,7 +721,7 @@ function clarifio_run_order_sync($order_id, $attempt = 1) {
     $payload = clarifio_build_order_payload($order);
     $result = clarifio_api_post('/api/v1/webhook/order-event', $payload);
 
-    clarifio_log_event("Order Webhook (#$order_id, προσπάθεια $attempt)", wp_json_encode($payload), $result['code'], $result['body']);
+    clarifio_log_event("Order Webhook (#$order_id, attempt $attempt)", wp_json_encode($payload), $result['code'], $result['body']);
 
     // Ξαναδοκιμάζουμε μόνο σε σφάλμα δικτύου ή 5xx. Τα 4xx (άκυρο key, λήξη συνδρομής, origin mismatch)
     // δεν θα διορθωθούν μόνα τους, οπότε μένουν στα logs για να τα δει ο χρήστης.
@@ -672,8 +734,8 @@ function clarifio_run_order_sync($order_id, $attempt = 1) {
 function clarifio_add_cost_field() {
     woocommerce_wp_text_input( array(
         'id'          => '_clarifio_cost',
-        'label'       => 'Κόστος Clarif.io (€)',
-        'description' => 'Εισάγετε το κόστος αγοράς για ακριβή υπολογισμό κέρδους.',
+        'label'       => __('Clarif.io Cost (€)', 'clarifio-connector'),
+        'description' => __('Enter the purchase cost for an accurate profit calculation.', 'clarifio-connector'),
         'desc_tip'    => true,
         'type'        => 'number',
         'custom_attributes' => array( 'step' => '0.01', 'min' => '0' )
@@ -727,10 +789,10 @@ function clarifio_handle_sync() {
 
     // 2. Έλεγχος Δικαιωμάτων (Μόνο Admin/Shop Manager)
     if (!current_user_can('manage_woocommerce')) {
-        wp_send_json_error('Μη εξουσιοδοτημένη πρόσβαση.');
+        wp_send_json_error(__('Unauthorized access.', 'clarifio-connector'));
     }
 
-    if (!get_option('clarifio_api_key')) wp_send_json_error('Δεν έχει οριστεί API Key.');
+    if (!get_option('clarifio_api_key')) wp_send_json_error(__('No API Key has been set.', 'clarifio-connector'));
 
     $products = wc_get_products(['status' => 'publish', 'limit' => -1, 'return' => 'objects']);
     $payload = [];
@@ -750,23 +812,23 @@ function clarifio_handle_sync() {
         }
     }
 
-    if (empty($payload)) wp_send_json_error('Δεν βρέθηκαν προϊόντα για συγχρονισμό.');
+    if (empty($payload)) wp_send_json_error(__('No products found to sync.', 'clarifio-connector'));
 
     $result = clarifio_api_post('/api/v1/Products/bulk-sync', $payload, 45);
 
     // Στα logs αποθηκεύουμε σύνοψη (πλήθος + δείγμα) και όχι ολόκληρο τον κατάλογο.
     clarifio_log_event(
-        'Product Sync (χειροκίνητος, ' . count($payload) . ' προϊόντα)',
+        'Product Sync (manual, ' . count($payload) . ' products)',
         wp_json_encode(['count' => count($payload), 'sample' => array_slice($payload, 0, 3)]),
         $result['code'],
         $result['body']
     );
 
     if ($result['ok']) {
-        wp_send_json_success(['message' => 'Στάλθηκαν επιτυχώς ' . count($payload) . ' προϊόντα!']);
+        wp_send_json_success(['message' => sprintf(__('Successfully sent %d products!', 'clarifio-connector'), count($payload))]);
     }
 
-    wp_send_json_error('Το API επέστρεψε κωδικό ' . $result['code'] . ': ' . clarifio_api_error_message($result));
+    wp_send_json_error(sprintf(__('The API returned code %1$s: %2$s', 'clarifio-connector'), $result['code'], clarifio_api_error_message($result)));
 }
 
 function clarifio_log_event($event_name, $request_body, $response_code, $response_body) {
@@ -820,7 +882,7 @@ function clarifio_ajax_get_orders_for_sync() {
 
     // 2. Έλεγχος Δικαιωμάτων (Μόνο Admin/Shop Manager)
     if (!current_user_can('manage_woocommerce')) {
-        wp_send_json_error('Μη εξουσιοδοτημένη πρόσβαση.');
+        wp_send_json_error(__('Unauthorized access.', 'clarifio-connector'));
     }
 
     // Ίδια λογική με το live sync: όλα τα statuses (και τα custom) εκτός από όσα δεν αποτελούν πώληση.
@@ -845,13 +907,13 @@ function clarifio_ajax_process_order_chunk() {
 
     // 2. Έλεγχος Δικαιωμάτων (Μόνο Admin/Shop Manager)
     if (!current_user_can('manage_woocommerce')) {
-        wp_send_json_error('Μη εξουσιοδοτημένη πρόσβαση.');
+        wp_send_json_error(__('Unauthorized access.', 'clarifio-connector'));
     }
 
-    if (!get_option('clarifio_api_key')) wp_send_json_error('Δεν έχει οριστεί API Key.');
+    if (!get_option('clarifio_api_key')) wp_send_json_error(__('No API Key has been set.', 'clarifio-connector'));
 
     $order_ids = isset($_POST['order_ids']) ? array_map('intval', (array) $_POST['order_ids']) : [];
-    if (empty($order_ids)) wp_send_json_error('Δεν δόθηκαν παραγγελίες προς επεξεργασία.');
+    if (empty($order_ids)) wp_send_json_error(__('No orders were provided for processing.', 'clarifio-connector'));
 
     $payload = [];
     foreach ($order_ids as $order_id) {
@@ -862,11 +924,11 @@ function clarifio_ajax_process_order_chunk() {
     $result = clarifio_api_post('/api/v1/webhook/bulk-sync-orders', $payload, 45);
 
     $summary = wp_json_encode(['orders' => count($payload), 'first_id' => $order_ids[0], 'last_id' => end($order_ids)]);
-    clarifio_log_event('Bulk Sync Orders (' . count($payload) . ' παραγγελίες)', $summary, $result['code'], $result['body']);
+    clarifio_log_event('Bulk Sync Orders (' . count($payload) . ' orders)', $summary, $result['code'], $result['body']);
 
     if (!$result['ok']) {
         // π.χ. 402 υπέρβαση ορίου/λήξη συνδρομής, 403 origin mismatch, 401 άκυρο API key
-        wp_send_json_error('Το API επέστρεψε κωδικό ' . $result['code'] . ': ' . clarifio_api_error_message($result));
+        wp_send_json_error(sprintf(__('The API returned code %1$s: %2$s', 'clarifio-connector'), $result['code'], clarifio_api_error_message($result)));
     }
 
     // Μαρκάρουμε τις παραγγελίες ως συγχρονισμένες. Μέσω του order object (όχι update_post_meta),
