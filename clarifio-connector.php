@@ -40,7 +40,8 @@ add_action('init', function () {
 
 // Σύνδεσμος προς το app με τη γλώσσα του admin (?lang=), ώστε να ανοίγει στην ίδια γλώσσα.
 function clarifio_app_url($path = '/') {
-    $lang = strpos(get_user_locale(), 'el') === 0 ? 'el' : 'en';
+    $locale = get_user_locale();
+    $lang = strpos($locale, 'el') === 0 ? 'el' : (strpos($locale, 'de') === 0 ? 'de' : 'en');
     $path = '/' . ltrim($path, '/');
     $separator = strpos($path, '?') === false ? '?' : '&';
     return 'https://app.clarif.io' . $path . $separator . 'lang=' . $lang;

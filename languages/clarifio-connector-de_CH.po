@@ -1,0 +1,327 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: Clarif.io Connector 1.15.0\n"
+"Report-Msgid-Bugs-To: https://www.clarif.io\n"
+"Language: de_CH\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+"X-Domain: clarifio-connector\n"
+
+msgid "Connects WooCommerce to Clarif.io to calculate net profit."
+msgstr "Verbindet WooCommerce mit Clarif.io zur Berechnung des Nettogewinns."
+
+msgid "<strong>Clarif.io Connector:</strong> The plugin requires <strong>WooCommerce</strong> to be installed and activated."
+msgstr "<strong>Clarif.io Connector:</strong> Das Plugin benötigt eine installierte und aktivierte Version von <strong>WooCommerce</strong>."
+
+#, php-format
+msgid "<strong>Clarif.io:</strong> Data sync has stopped because your subscription has expired. <a href=\"%s\" target=\"_blank\">Go to billing</a> to renew it."
+msgstr "<strong>Clarif.io:</strong> Die Datensynchronisierung wurde gestoppt, weil Ihr Abonnement abgelaufen ist. <a href=\"%s\" target=\"_blank\">Zur Abrechnung</a>, um es zu verlängern."
+
+msgid "Clarif.io settings were saved successfully."
+msgstr "Die Clarif.io-Einstellungen wurden erfolgreich gespeichert."
+
+msgid "Unknown error"
+msgstr "Unbekannter Fehler"
+
+msgid "Success:"
+msgstr "Erfolg:"
+
+msgid "Error:"
+msgstr "Fehler:"
+
+msgid "Could not reach the server:"
+msgstr "Server nicht erreichbar:"
+
+msgid "Start catalog sync"
+msgstr "Katalogsynchronisierung starten"
+
+msgid "Sync in progress..."
+msgstr "Synchronisierung läuft..."
+
+msgid "Preparing data..."
+msgstr "Daten werden vorbereitet..."
+
+msgid "No orders:"
+msgstr "Keine Bestellungen:"
+
+msgid "No orders found to sync."
+msgstr "Es wurden keine Bestellungen zur Synchronisierung gefunden."
+
+#, php-format
+msgid "Sending orders %1$s–%2$s of %3$s..."
+msgstr "Bestellungen %1$s–%2$s von %3$s werden gesendet..."
+
+msgid "Completed"
+msgstr "Abgeschlossen"
+
+#, php-format
+msgid "%1$s orders were synced to Clarif.io."
+msgstr "%1$s Bestellungen wurden mit Clarif.io synchronisiert."
+
+#, php-format
+msgid "Stopped after %1$s of %2$s orders:"
+msgstr "Abgebrochen nach %1$s von %2$s Bestellungen:"
+
+msgid "Your daily financial compass for e-commerce."
+msgstr "Ihr täglicher finanzieller Kompass für den E-Commerce."
+
+msgid "Open app"
+msgstr "App öffnen"
+
+msgid "Overview"
+msgstr "Übersicht"
+
+msgid "Products & Costs"
+msgstr "Produkte & Kosten"
+
+msgid "Order History"
+msgstr "Bestellverlauf"
+
+msgid "Connection & Settings"
+msgstr "Verbindung & Einstellungen"
+
+msgid "System Status"
+msgstr "Systemstatus"
+
+msgid "Financial clarity for your e-shop."
+msgstr "Finanzielle Klarheit für Ihren E-Shop."
+
+msgid "Revenue is vanity, profit is sanity. Clarif.io connects to your WooCommerce store and calculates your <strong>real Net Profit</strong> in real time, automatically subtracting purchase costs (COGS), shipping and payment fees."
+msgstr "Umsatz ist Eitelkeit, Gewinn ist Vernunft. Clarif.io verbindet sich mit Ihrem WooCommerce-Shop und berechnet in Echtzeit Ihren <strong>tatsächlichen Nettogewinn</strong>, indem Einkaufskosten (COGS), Versand und Zahlungsgebühren automatisch abgezogen werden."
+
+msgid "Start your free trial"
+msgstr "Starten Sie Ihre kostenlose Testphase"
+
+msgid "Find out which products leave you real profit and which ones \"eat\" your budget. No commitment, no credit card."
+msgstr "Finden Sie heraus, welche Produkte Ihnen echten Gewinn bringen und welche Ihr Budget \"auffressen\". Unverbindlich, ohne Kreditkarte."
+
+msgid "Create account"
+msgstr "Konto erstellen"
+
+msgid "Connect an existing account"
+msgstr "Bestehendes Konto verbinden"
+
+msgid "If you have already registered, paste your store's unique API Key below. You will find it under \"Stores\" in the Clarif.io app."
+msgstr "Wenn Sie bereits registriert sind, fügen Sie unten den eindeutigen API-Schlüssel Ihres Shops ein. Sie finden ihn in der Clarif.io-App unter \"Shops\"."
+
+msgid "e.g. cl_live_8f7d6a5..."
+msgstr "z. B. cl_live_8f7d6a5..."
+
+msgid "Connect securely"
+msgstr "Sicher verbinden"
+
+msgid "<strong>Network error:</strong> Could not reach the Clarif.io servers. Please check your connection."
+msgstr "<strong>Netzwerkfehler:</strong> Die Clarif.io-Server sind nicht erreichbar. Bitte prüfen Sie Ihre Verbindung."
+
+msgid "Your subscription has expired"
+msgstr "Ihr Abonnement ist abgelaufen"
+
+msgid "Order sync and statistics have stopped. Please renew your plan to keep tracking your profits."
+msgstr "Die Bestellsynchronisierung und die Statistiken wurden gestoppt. Bitte verlängern Sie Ihren Tarif, um Ihre Gewinne weiter zu verfolgen."
+
+msgid "Renew subscription"
+msgstr "Abonnement verlängern"
+
+msgid "Secure connection active"
+msgstr "Sichere Verbindung aktiv"
+
+#, php-format
+msgid "The e-shop <strong>%s</strong> is syncing in real time."
+msgstr "Der E-Shop <strong>%s</strong> wird in Echtzeit synchronisiert."
+
+msgid "This month's summary"
+msgstr "Zusammenfassung des laufenden Monats"
+
+msgid "Updated in real time"
+msgstr "In Echtzeit aktualisiert"
+
+msgid "Gross revenue"
+msgstr "Bruttoumsatz"
+
+msgid "Total revenue before deductions"
+msgstr "Gesamtumsatz vor Abzügen"
+
+msgid "Net profit"
+msgstr "Nettogewinn"
+
+msgid "The money that stays in the business"
+msgstr "Das Geld, das im Unternehmen bleibt"
+
+msgid "Average margin"
+msgstr "Durchschnittliche Marge"
+
+msgid "Store profitability health"
+msgstr "Rentabilität des Shops"
+
+msgid "For deeper analysis, customer LTV and per-product reports, go to the full app."
+msgstr "Für tiefere Analysen, den Kunden-LTV und Berichte pro Produkt öffnen Sie die vollständige App."
+
+msgid "Go to the web app &rarr;"
+msgstr "Zur Web-App &rarr;"
+
+msgid "<strong>Authentication error:</strong> The API Key appears to be invalid or has been revoked. Please check your settings."
+msgstr "<strong>Authentifizierungsfehler:</strong> Der API-Schlüssel scheint ungültig zu sein oder wurde widerrufen. Bitte prüfen Sie Ihre Einstellungen."
+
+msgid "Connection & Algorithm Settings"
+msgstr "Verbindungs- & Algorithmus-Einstellungen"
+
+msgid "Manage how your store communicates with the data analytics platform."
+msgstr "Verwalten Sie, wie Ihr Shop mit der Datenanalyse-Plattform kommuniziert."
+
+msgid "Store API Key"
+msgstr "API-Schlüssel des Shops"
+
+msgid "The secret key that secures the encrypted transfer of your data."
+msgstr "Der geheime Schlüssel, der die verschlüsselte Übertragung Ihrer Daten sichert."
+
+msgid "Default purchase cost (COGS)"
+msgstr "Standard-Einkaufskosten (COGS)"
+
+msgid "% of the retail price"
+msgstr "% des Verkaufspreises"
+
+msgid "If a product has no explicitly filled \"Cost\" field, the Clarif.io algorithm will use this percentage as a safety net."
+msgstr "Hat ein Produkt kein ausdrücklich ausgefülltes Feld \"Kosten\", verwendet der Clarif.io-Algorithmus diesen Prozentsatz als Sicherheitsnetz."
+
+msgid "Save changes"
+msgstr "Änderungen speichern"
+
+msgid "Product Database"
+msgstr "Produktdatenbank"
+
+msgid "The foundation of accurate financial calculations. This function collects all your active products, SKUs and costs, building the unified catalog in Clarif.io."
+msgstr "Die Grundlage korrekter Finanzberechnungen. Diese Funktion sammelt alle Ihre aktiven Produkte, SKUs und Kosten und baut den einheitlichen Katalog in Clarif.io auf."
+
+msgid "When should you use this function?"
+msgstr "Wann sollten Sie diese Funktion nutzen?"
+
+msgid "During the plugin's <strong>initial installation</strong>."
+msgstr "Bei der <strong>Erstinstallation</strong> des Plugins."
+
+msgid "If you made a <strong>bulk change of purchase prices (costs)</strong> in WooCommerce (e.g. via a CSV file or an ERP)."
+msgstr "Wenn Sie in WooCommerce die <strong>Einkaufspreise (Kosten) gesammelt geändert</strong> haben (z. B. über eine CSV-Datei oder ein ERP)."
+
+msgid "*Note: You do not need to press this every day. When you edit or create a product, the plugin updates Clarif.io automatically in the background."
+msgstr "*Hinweis: Sie müssen dies nicht täglich auslösen. Wenn Sie ein Produkt bearbeiten oder erstellen, aktualisiert das Plugin Clarif.io automatisch im Hintergrund."
+
+msgid "Order History Analysis"
+msgstr "Analyse des Bestellverlaufs"
+
+msgid "Discover the hidden value of your older data. Bulk sync sends your sales history to Clarif.io, allowing the algorithm to build the historical charts and calculate <strong>Customer Lifetime Value (LTV)</strong>."
+msgstr "Entdecken Sie den verborgenen Wert Ihrer älteren Daten. Die gesammelte Synchronisierung sendet Ihren Verkaufsverlauf an Clarif.io, damit der Algorithmus die historischen Diagramme erstellen und den <strong>Customer Lifetime Value (LTV)</strong> berechnen kann."
+
+msgid "<strong>Infrastructure note:</strong> The process is designed to be \"invisible\" to your server. Orders are grouped and sent in batches (of 50), ensuring no slowdown of your e-shop during the sync."
+msgstr "<strong>Hinweis zur Infrastruktur:</strong> Der Vorgang ist so gestaltet, dass er für Ihren Server \"unsichtbar\" bleibt. Bestellungen werden gruppiert und in Paketen (zu 50) gesendet, sodass Ihr E-Shop während der Synchronisierung nicht langsamer wird."
+
+msgid "Start history analysis"
+msgstr "Verlaufsanalyse starten"
+
+msgid "Event Log"
+msgstr "Ereignisprotokoll"
+
+msgid "The last 50 entries are kept"
+msgstr "Die letzten 50 Einträge werden aufbewahrt"
+
+msgid "Use this screen to troubleshoot, or send a screenshot to Clarif.io support if you run into a problem."
+msgstr "Nutzen Sie diese Ansicht zur Fehlersuche oder senden Sie bei einem Problem einen Screenshot an den Clarif.io-Support."
+
+msgid "Event"
+msgstr "Ereignis"
+
+msgid "Status"
+msgstr "Status"
+
+msgid "Details (request / response)"
+msgstr "Details (Anfrage / Antwort)"
+
+msgid "No communication events have been logged yet."
+msgstr "Es wurden noch keine Kommunikationsereignisse protokolliert."
+
+msgid "No response"
+msgstr "Keine Antwort"
+
+msgid "View"
+msgstr "Anzeigen"
+
+msgid "Request"
+msgstr "Anfrage"
+
+msgid "Response"
+msgstr "Antwort"
+
+msgid "(no response)"
+msgstr "(keine Antwort)"
+
+msgid "Could not reach Clarif.io"
+msgstr "Clarif.io ist nicht erreichbar"
+
+msgid "Origin mismatch: this API key does not belong to this domain."
+msgstr "Domain stimmt nicht überein: Dieser API-Schlüssel gehört nicht zu dieser Domain."
+
+msgid "Your subscription has expired. Please upgrade your plan."
+msgstr "Ihr Abonnement ist abgelaufen. Bitte upgraden Sie Ihren Tarif."
+
+msgid "Your 14-day trial has ended."
+msgstr "Ihre 14-tägige Testphase ist beendet."
+
+msgid "Your trial limit (500 orders) has been reached."
+msgstr "Das Limit Ihrer Testphase (500 Bestellungen) ist erreicht."
+
+msgid "Your trial limit would be exceeded. Please upgrade."
+msgstr "Das Limit Ihrer Testphase würde überschritten. Bitte upgraden Sie."
+
+msgid "You have reached your monthly order limit."
+msgstr "Sie haben Ihr monatliches Bestelllimit erreicht."
+
+msgid "Store not found."
+msgstr "Shop nicht gefunden."
+
+msgid "An unexpected error occurred. Please try again."
+msgstr "Ein unerwarteter Fehler ist aufgetreten. Bitte versuchen Sie es erneut."
+
+#, php-format
+msgid "You have reached the limit of %d products. Please upgrade your plan."
+msgstr "Sie haben das Limit von %d Produkten erreicht. Bitte upgraden Sie Ihren Tarif."
+
+#, php-format
+msgid "Sync failed. You exceed the limit of %d products."
+msgstr "Synchronisierung fehlgeschlagen. Sie überschreiten das Limit von %d Produkten."
+
+msgid "Enter the purchase cost for an accurate profit calculation."
+msgstr "Geben Sie die Einkaufskosten für eine genaue Gewinnberechnung ein."
+
+msgid "Unauthorized access."
+msgstr "Kein Zugriff."
+
+msgid "No API Key has been set."
+msgstr "Es wurde kein API-Schlüssel festgelegt."
+
+msgid "No products found to sync."
+msgstr "Es wurden keine Produkte zur Synchronisierung gefunden."
+
+msgid "No orders were provided for processing."
+msgstr "Es wurden keine Bestellungen zur Verarbeitung übergeben."
+
+#, php-format
+msgid "Successfully sent %d products!"
+msgstr "%d Produkte wurden erfolgreich gesendet!"
+
+#, php-format
+msgid "The API returned code %1$s: %2$s"
+msgstr "Die API hat den Code %1$s zurückgegeben: %2$s"
+
+#, php-format
+msgid "Clarif.io Cost (%s)"
+msgstr "Clarif.io-Kosten (%s)"
+
+msgid "Example: if set to 60% and you sell something for 100, the system will assume you bought it for 60."
+msgstr "Beispiel: Bei 60% und einem Verkauf für 100 geht das System davon aus, dass Sie es für 60 eingekauft haben."
+
+msgid "The currency of this order cannot be converted automatically."
+msgstr "Die Währung dieser Bestellung kann nicht automatisch umgerechnet werden."
+
+msgid "Exchange rates are temporarily unavailable. Please try again later."
+msgstr "Die Wechselkurse sind vorübergehend nicht verfügbar. Bitte versuchen Sie es später erneut."
+
