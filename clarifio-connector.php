@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Clarif.io Connector
  * Description: Connects WooCommerce to Clarif.io to calculate net profit.
- * Version: 1.13.1
+ * Version: 1.14.0
  * Text Domain: clarifio-connector
  * Domain Path: /languages
  * Author: Clarif.io Team
@@ -126,6 +126,7 @@ function clarifio_settings_html() {
     if (isset($_POST['clarifio_api_key'])) {
         update_option('clarifio_api_key', sanitize_text_field($_POST['clarifio_api_key']));
         update_option('clarifio_default_cost_perc', floatval($_POST['clarifio_default_cost_perc']));
+        clarifio_send_handshake(true);
         echo '<div class="notice notice-success is-dismissible"><p>✅ ' . esc_html__('Clarif.io settings were saved successfully.', 'clarifio-connector') . '</p></div>';
     }
 
@@ -247,7 +248,8 @@ function clarifio_settings_html() {
             
             <?php 
             // --- TAB 1: DASHBOARD ---
-            elseif ($active_tab == 'dashboard' && !empty($api_key)) : 
+            elseif ($active_tab == 'dashboard' && !empty($api_key)) :
+                clarifio_send_handshake();
                 
                 $status_response = wp_remote_get(CLARIFIO_API_BASE_URL .'/api/v1/Stores/status', array(
                     'headers' => array('X-Clarifio-ApiKey' => $api_key, 'X-Clarifio-Store-Url' => home_url()),
@@ -302,13 +304,13 @@ function clarifio_settings_html() {
                                 <div style="display: flex; gap: 20px; flex-wrap: wrap;">
                                     <div style="flex: 1; min-width: 200px; background: #fff; border: 1px solid #e2e8f0; padding: 20px; border-radius: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.02);">
                                         <span style="color: #64748b; font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;"><?php esc_html_e('Gross revenue', 'clarifio-connector'); ?></span>
-                                        <div style="font-size: 28px; font-weight: 700; color: #1e293b; margin-top: 8px;">€<?php echo number_format_i18n($stats->totalRevenue, 2); ?></div>
+                                        <div style="font-size: 28px; font-weight: 700; color: #1e293b; margin-top: 8px;"><?php echo wp_kses_post(wc_price($stats->totalRevenue, ['currency' => !empty($stats->currency) ? $stats->currency : get_woocommerce_currency()])); ?></div>
                                         <p style="margin: 5px 0 0 0; font-size: 12px; color: #94a3b8;"><?php esc_html_e('Total revenue before deductions', 'clarifio-connector'); ?></p>
                                     </div>
 
                                     <div style="flex: 1; min-width: 200px; background: #fff; border: 1px solid #10b981; padding: 20px; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(16, 185, 129, 0.1);">
                                         <span style="color: #047857; font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;"><?php esc_html_e('Net profit', 'clarifio-connector'); ?></span>
-                                        <div style="font-size: 28px; font-weight: 700; color: #10b981; margin-top: 8px;">€<?php echo number_format_i18n($stats->totalNetProfit, 2); ?></div>
+                                        <div style="font-size: 28px; font-weight: 700; color: #10b981; margin-top: 8px;"><?php echo wp_kses_post(wc_price($stats->totalNetProfit, ['currency' => !empty($stats->currency) ? $stats->currency : get_woocommerce_currency()])); ?></div>
                                         <p style="margin: 5px 0 0 0; font-size: 12px; color: #059669;"><?php esc_html_e('The money that stays in the business', 'clarifio-connector'); ?></p>
                                     </div>
 
@@ -361,7 +363,7 @@ function clarifio_settings_html() {
                                     </div>
                                     <p class="description" style="max-width: 500px;">
                                         <?php esc_html_e('If a product has no explicitly filled "Cost" field, the Clarif.io algorithm will use this percentage as a safety net.', 'clarifio-connector'); ?> <br>
-                                        <em><?php esc_html_e('Example: if set to 60% and you sell something for €100, the system will assume you bought it for €60.', 'clarifio-connector'); ?></em>
+                                        <em><?php esc_html_e('Example: if set to 60% and you sell something for 100, the system will assume you bought it for 60.', 'clarifio-connector'); ?></em>
                                     </p>
                                 </td>
                             </tr>
@@ -639,6 +641,24 @@ function clarifio_translate_api_code($code, $params = []) {
     return null;
 }
 
+// Handshake: δηλώνει στο Clarif.io το νόμισμα και τη χώρα του WooCommerce. Το νόμισμα του καταστήματος
+// ορίζεται μόνο από εδώ (δεν το δηλώνει ο χρήστης). Στέλνεται ξανά μόνο όταν αλλάξουν τα στοιχεία
+// (ή κάθε 12 ώρες), ώστε να μη χτυπάμε το API σε κάθε άνοιγμα της οθόνης.
+function clarifio_send_handshake($force = false) {
+    if (!get_option('clarifio_api_key')) return;
+
+    $currency = get_woocommerce_currency();
+    $country  = get_option('woocommerce_default_country', '');
+    $signature = md5(get_option('clarifio_api_key') . '|' . $currency . '|' . $country);
+
+    if (!$force && get_transient('clarifio_handshake_' . $signature)) return;
+
+    $result = clarifio_api_post('/api/v1/Stores/handshake', ['currency' => $currency, 'country' => $country], 10);
+    clarifio_log_event('Store Handshake (' . $currency . ', ' . ($country ?: '-') . ')', wp_json_encode(['currency' => $currency, 'country' => $country]), $result['code'], $result['body']);
+
+    if ($result['ok']) set_transient('clarifio_handshake_' . $signature, 1, 12 * HOUR_IN_SECONDS);
+}
+
 function clarifio_pretty_json($text) {
     $decoded = json_decode((string) $text, true);
     if (is_array($decoded)) {
@@ -679,6 +699,7 @@ function clarifio_build_order_payload($order) {
         'totalTax' => (float) $order->get_total_tax(),
         'shipping' => (float) $order->get_shipping_total(),
         'status' => $order->get_status(),
+        'currency' => $order->get_currency(),
         'paymentMethod' => $order->get_payment_method(),
         'customerEmail' => $order->get_billing_email(),
         'customerFirstName' => $order->get_billing_first_name(),
@@ -734,7 +755,7 @@ function clarifio_run_order_sync($order_id, $attempt = 1) {
 function clarifio_add_cost_field() {
     woocommerce_wp_text_input( array(
         'id'          => '_clarifio_cost',
-        'label'       => __('Clarif.io Cost (€)', 'clarifio-connector'),
+        'label'       => sprintf(__('Clarif.io Cost (%s)', 'clarifio-connector'), get_woocommerce_currency_symbol()),
         'description' => __('Enter the purchase cost for an accurate profit calculation.', 'clarifio-connector'),
         'desc_tip'    => true,
         'type'        => 'number',

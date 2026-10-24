@@ -1,6 +1,6 @@
 msgid ""
 msgstr ""
-"Project-Id-Version: Clarif.io Connector 1.13.1\n"
+"Project-Id-Version: Clarif.io Connector 1.14.0\n"
 "Report-Msgid-Bugs-To: https://www.clarif.io\n"
 "Language: el\n"
 "MIME-Version: 1.0\n"
@@ -185,9 +185,6 @@ msgstr "% της λιανικής τιμής"
 msgid "If a product has no explicitly filled \"Cost\" field, the Clarif.io algorithm will use this percentage as a safety net."
 msgstr "Εάν ένα προϊόν δεν έχει ρητά συμπληρωμένο πεδίο \"Κόστος\", ο αλγόριθμος του Clarif.io θα χρησιμοποιήσει αυτό το ποσοστό ως δίχτυ ασφαλείας."
 
-msgid "Example: if set to 60% and you sell something for €100, the system will assume you bought it for €60."
-msgstr "Παράδειγμα: Αν οριστεί στο 60% και πουλήσετε κάτι 100€, το σύστημα θα θεωρήσει ότι το αγοράσατε 60€."
-
 msgid "Save changes"
 msgstr "Αποθήκευση Αλλαγών"
 
@@ -292,9 +289,6 @@ msgstr "Έχετε φτάσει το όριο των %d προϊόντων. Αν
 msgid "Sync failed. You exceed the limit of %d products."
 msgstr "Αδυναμία συγχρονισμού. Υπερβαίνετε το όριο των %d προϊόντων."
 
-msgid "Clarif.io Cost (€)"
-msgstr "Κόστος Clarif.io (€)"
-
 msgid "Enter the purchase cost for an accurate profit calculation."
 msgstr "Εισάγετε το κόστος αγοράς για ακριβή υπολογισμό κέρδους."
 
@@ -317,4 +311,11 @@ msgstr "Στάλθηκαν επιτυχώς %d προϊόντα!"
 #, php-format
 msgid "The API returned code %1$s: %2$s"
 msgstr "Το API επέστρεψε κωδικό %1$s: %2$s"
+
+#, php-format
+msgid "Clarif.io Cost (%s)"
+msgstr "Κόστος Clarif.io (%s)"
+
+msgid "Example: if set to 60% and you sell something for 100, the system will assume you bought it for 60."
+msgstr "Παράδειγμα: Αν οριστεί στο 60% και πουλήσετε κάτι 100, το σύστημα θα θεωρήσει ότι το αγοράσατε 60."
 
