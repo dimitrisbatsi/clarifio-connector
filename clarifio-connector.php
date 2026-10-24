@@ -635,6 +635,8 @@ function clarifio_translate_api_code($code, $params = []) {
         case 'MONTHLY_ORDER_LIMIT_REACHED': return __('You have reached your monthly order limit.', 'clarifio-connector');
         case 'STORE_NOT_FOUND': return __('Store not found.', 'clarifio-connector');
         case 'UNEXPECTED_ERROR': return __('An unexpected error occurred. Please try again.', 'clarifio-connector');
+        case 'CURRENCY_NOT_SUPPORTED': return __('The currency of this order cannot be converted automatically.', 'clarifio-connector');
+        case 'EXCHANGE_RATE_UNAVAILABLE': return __('Exchange rates are temporarily unavailable. Please try again later.', 'clarifio-connector');
         case 'PRODUCT_LIMIT_REACHED': return sprintf(__('You have reached the limit of %d products. Please upgrade your plan.', 'clarifio-connector'), (int) ($params['limit'] ?? 0));
         case 'PRODUCT_SYNC_LIMIT_EXCEEDED': return sprintf(__('Sync failed. You exceed the limit of %d products.', 'clarifio-connector'), (int) ($params['limit'] ?? 0));
     }
@@ -700,6 +702,12 @@ function clarifio_build_order_payload($order) {
         'shipping' => (float) $order->get_shipping_total(),
         'status' => $order->get_status(),
         'currency' => $order->get_currency(),
+        // Βασικό νόμισμα του καταστήματος. Αν ο πελάτης πλήρωσε σε άλλο νόμισμα (multi-currency), το Clarif.io
+        // μετατρέπει την παραγγελία στο βασικό πριν υπολογίσει το κέρδος.
+        'baseCurrency' => get_woocommerce_currency(),
+        // Αν ένα multi-currency plugin αποθηκεύει την ισοτιμία στην παραγγελία, μπορεί να τη δώσει μέσω του φίλτρου
+        // (ποσό παραγγελίας * ισοτιμία = ποσό στο βασικό νόμισμα). Αλλιώς χρησιμοποιείται η ισοτιμία της ΕΚΤ της ημέρας.
+        'exchangeRate' => apply_filters('clarifio_order_exchange_rate', null, $order),
         'paymentMethod' => $order->get_payment_method(),
         'customerEmail' => $order->get_billing_email(),
         'customerFirstName' => $order->get_billing_first_name(),

@@ -319,3 +319,9 @@ msgstr "Κόστος Clarif.io (%s)"
 msgid "Example: if set to 60% and you sell something for 100, the system will assume you bought it for 60."
 msgstr "Παράδειγμα: Αν οριστεί στο 60% και πουλήσετε κάτι 100, το σύστημα θα θεωρήσει ότι το αγοράσατε 60."
 
+msgid "The currency of this order cannot be converted automatically."
+msgstr "Το νόμισμα αυτής της παραγγελίας δεν μπορεί να μετατραπεί αυτόματα."
+
+msgid "Exchange rates are temporarily unavailable. Please try again later."
+msgstr "Οι ισοτιμίες δεν είναι προσωρινά διαθέσιμες. Παρακαλώ δοκιμάστε ξανά αργότερα."
+
