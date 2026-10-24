@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Clarif.io Connector
  * Description: Connects WooCommerce to Clarif.io to calculate net profit.
- * Version: 1.14.0
+ * Version: 1.15.0
  * Text Domain: clarifio-connector
  * Domain Path: /languages
  * Author: Clarif.io Team
@@ -709,6 +709,8 @@ function clarifio_build_order_payload($order) {
         // (ποσό παραγγελίας * ισοτιμία = ποσό στο βασικό νόμισμα). Αλλιώς χρησιμοποιείται η ισοτιμία της ΕΚΤ της ημέρας.
         'exchangeRate' => apply_filters('clarifio_order_exchange_rate', null, $order),
         'paymentMethod' => $order->get_payment_method(),
+        // Ο τίτλος (π.χ. "TWINT") βοηθά το Clarif.io να αναγνωρίσει τη μέθοδο όταν το id της πύλης δεν το δείχνει.
+        'paymentMethodTitle' => wp_strip_all_tags($order->get_payment_method_title()),
         'customerEmail' => $order->get_billing_email(),
         'customerFirstName' => $order->get_billing_first_name(),
         'customerLastName' => $order->get_billing_last_name(),
